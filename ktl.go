@@ -4,84 +4,71 @@
 package main
 
 import (
-  "time"
   "fmt"
   "strings"
+  "path"
   "sort"
   "sync"
+  "crypto/md5"
+  "os"
+  "os/exec"
+  "io"
 )
 
 func main() {
-  s := &storage{data: make(map[string]int)}
+  s := &localStorage{base: "teststorage"}
 
   /*
-    a -
-       |
-    b ---- d
-    |       \
-    ----------- f
-            /
-    c ---- e
+  cat teststorage/input.txt | sort | uniq | md5 > teststorage/md5ed
   */
 
-
-  // Leaf nodes (workflow inputs)
-  s.set("a", 1)
-  //s.set("b", 2)
-  s.set("c", 3)
-
-  incamt := new(int)
-  *incamt = 1
-
   nodes := []*node{
-    valueNode(s, "a"),
-    valueNode(s, "b"),
-    valueNode(s, "c"),
-
-    // 1 + 2 = 3
-    incTask(s, "b", "a", incamt),
-    sumTask(s, "d", "a", "b"),
-
-    // 3 + 1 = 4
-    incTask(s, "e", "c", incamt),
-
-    // 2 + 3 + 4 = 9
-    sumTask(s, "f", "b", "d", "e"),
+    fileNode(s, "input.txt"),
+    alpineNode(s, "sort-1", "sort", "input.txt"),
+    alpineNode(s, "uniq-1", "uniq", "sort-1"),
+    alpineNode(s, "md5-1", "md5sum", "uniq-1"),
   }
 
   r := resolver{
-    dryrun: true,
+    //dryrun: true,
     cache: &testcache{ data: make(map[string]string) },
     executor: testexecutor{},
     graph: buildGraph(nodes),
   }
 
   for i := 0; i < 3; i++ {
-    err := r.Resolve("f")
-    s.set("c", i)
-    //s.set("c", 8)
-    //*incamt = *incamt + 1
-    fmt.Println("Result: ", s.get("f"), err)
-    fmt.Println("==================")
+    err := r.Resolve("md5-1")
+    fmt.Println("Resolve err: ", err)
+    fmt.Println("=======================")
   }
-
-  nodes2 := []*node{
-    valueNode(s, "f"),
-    // f + 1
-    incTask(s, "g", "f", incamt),
-  }
-
-  r2 := resolver{
-    //dryrun: true,
-    cache: &testcache{ data: make(map[string]string) },
-    executor: testexecutor{},
-    graph: buildGraph(nodes2),
-  }
-  r2.Resolve("g")
-  fmt.Println("Result: ", s.get("g"))
-  fmt.Println("==================")
 }
 
+func alpineNode(s storage, name, cmd, in string) *node {
+  return &node{
+    name: name,
+    inputs: []string{in},
+    task: func() {
+      cmd := exec.Command("docker", "run",
+        "-v", "/Users/buchanae/src/ktl/teststorage:/opt/teststorage",
+        "alpine",
+        cmd, "/opt/" + s.path(in))
+
+      fmt.Println("cmd:", cmd.Args)
+
+      out := s.path(name)
+      f, _ := os.Create(out)
+      defer f.Close()
+      cmd.Stdout = f
+      cmd.Run()
+    },
+    taskhash: func() string {
+      return cmd
+    },
+    hash: func() string {
+      return s.hash(name)
+    },
+  }
+}
 
 /*
 TODO
@@ -107,12 +94,12 @@ func buildGraph(nodes []*node) graph {
   return g
 }
 
-func valueNode(s *storage, key string) *node {
+func fileNode(s storage, key string) *node {
   return &node{
     name: key,
     task: func() {},
     taskhash: func() string {
-      return "noop()"
+      return "file://" + key
     },
     hash: func() string {
       return s.hash(key)
@@ -120,75 +107,41 @@ func valueNode(s *storage, key string) *node {
   }
 }
 
-func incTask(s *storage, out string, in string, amt *int) *node {
-  return &node{
-    name: out,
-    inputs: []string{in},
-    task: func() {
-      fmt.Println("INC AMT", *amt)
-      s.set(out, s.get(in) + *amt)
-      time.Sleep(time.Second * 3)
-    },
-    taskhash: func() string {
-      return fmt.Sprintf("inc(%d)", *amt)
-    },
-    hash: func() string {
-      return s.hash(out)
-    },
-  }
+
+
+
+
+type storage interface {
+  hash(key string) string
+  path(key string) string
 }
 
-func sumTask(s *storage, out string, keys ...string) *node {
-  return &node{
-    name: out,
-    inputs: keys,
-    task: func() {
-      t := 0
-      for _, k := range keys {
-        t += s.get(k)
-      }
-      s.set(out, t)
-      time.Sleep(time.Second * 3)
-    },
-    taskhash: func() string {
-      return "sum()"
-    },
-    hash: func() string {
-      return s.hash(out)
-    },
-  }
-}
-
-
-
-type storage struct {
+type localStorage struct {
+  base string
   mtx sync.Mutex
-  data map[string]int
 }
 
-func (s *storage) hash(key string) string {
+func (s *localStorage) path(key string) string {
+  return path.Join(s.base, key)
+}
+
+func (s *localStorage) hash(key string) string {
   s.mtx.Lock()
   defer s.mtx.Unlock()
-  if v, ok := s.data[key]; ok {
-    return fmt.Sprintf("%d", v)
-  }
-  // TODO hack for checking whether the value exists in storage
-  fmt.Println("no such key, cannot hash", key)
-  return ""
-}
 
-func (s *storage) get(key string) int {
-  s.mtx.Lock()
-  defer s.mtx.Unlock()
-  return s.data[key]
-}
+  f, err := os.Open(path.Join(s.base, key))
+	if err != nil {
+    return ""
+	}
+	defer f.Close()
 
-func (s *storage) set(key string, val int) {
-  s.mtx.Lock()
-  defer s.mtx.Unlock()
-  s.data[key] = val
-}
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+    return ""
+	}
 
+  return string(h.Sum(nil))
+}
 
 
 type testexecutor struct {}
@@ -282,9 +235,9 @@ func (r *resolver) Resolve(k string) error {
     return xerr
   }
 
-  fmt.Println("store: ", k, hash)
   // During dry-run mode, the hash might be empty.
   if hash != "" {
+    fmt.Println("store: ", k, hash)
     r.cache.store(k, hash)
   }
   return nil
