@@ -13,6 +13,7 @@ import (
   "os"
   "os/exec"
   "io"
+  "github.com/ivaxer/go-xattr"
 )
 
 func main() {
@@ -27,18 +28,21 @@ func main() {
     alpineNode(s, "sort-1", "sort", "input.txt"),
     alpineNode(s, "uniq-1", "uniq", "sort-1"),
     alpineNode(s, "md5-1", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-2", "md5sum", "uniq-1"),
   }
 
   r := resolver{
     //dryrun: true,
-    cache: &testcache{ data: make(map[string]string) },
+    //cache: &testcache{ data: make(map[string]string) },
+    cache: &localCache{base: "teststorage"},
     executor: testexecutor{},
     graph: buildGraph(nodes),
   }
 
   for i := 0; i < 3; i++ {
     err := r.Resolve("md5-1")
-    fmt.Println("Resolve err: ", err)
+    err2 := r.Resolve("md5-2")
+    fmt.Println("Resolve err: ", err, err2)
     fmt.Println("=======================")
   }
 }
@@ -51,7 +55,8 @@ func alpineNode(s storage, name, cmd, in string) *node {
       cmd := exec.Command("docker", "run",
         "-v", "/Users/buchanae/src/ktl/teststorage:/opt/teststorage",
         "alpine",
-        cmd, "/opt/" + s.path(in))
+        cmd, "/opt/" + s.path(in),
+      )
 
       fmt.Println("cmd:", cmd.Args)
 
@@ -66,6 +71,19 @@ func alpineNode(s storage, name, cmd, in string) *node {
     },
     hash: func() string {
       return s.hash(name)
+    },
+  }
+}
+
+func fileNode(s storage, key string) *node {
+  return &node{
+    name: key,
+    task: func() {},
+    taskhash: func() string {
+      return "file://" + key
+    },
+    hash: func() string {
+      return s.hash(key)
     },
   }
 }
@@ -92,19 +110,6 @@ func buildGraph(nodes []*node) graph {
     g[n.name] = n
   }
   return g
-}
-
-func fileNode(s storage, key string) *node {
-  return &node{
-    name: key,
-    task: func() {},
-    taskhash: func() string {
-      return "file://" + key
-    },
-    hash: func() string {
-      return s.hash(key)
-    },
-  }
 }
 
 
@@ -141,6 +146,28 @@ func (s *localStorage) hash(key string) string {
 	}
 
   return string(h.Sum(nil))
+}
+
+type localCache struct {
+  base string
+  mtx sync.Mutex
+}
+func (t *localCache) store(k, h string) {
+  t.mtx.Lock()
+  defer t.mtx.Unlock()
+
+  p := path.Join(t.base, k)
+  xattr.Set(p, "ktl-hash", []byte(h))
+}
+func (t *localCache) isCached(k, h string) bool {
+  t.mtx.Lock()
+  defer t.mtx.Unlock()
+
+  p := path.Join(t.base, k)
+  if b, err := xattr.Get(p, "ktl-hash"); err == nil {
+    return string(b) == h
+  }
+  return false
 }
 
 
