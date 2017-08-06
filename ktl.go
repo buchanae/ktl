@@ -27,7 +27,7 @@ func main() {
 
   // Leaf nodes (workflow inputs)
   s.set("a", 1)
-  s.set("b", 2)
+  //s.set("b", 2)
   s.set("c", 3)
 
   incamt := new(int)
@@ -39,6 +39,7 @@ func main() {
     valueNode(s, "c"),
 
     // 1 + 2 = 3
+    incTask(s, "b", "a", incamt),
     sumTask(s, "d", "a", "b"),
 
     // 3 + 1 = 4
@@ -49,7 +50,7 @@ func main() {
   }
 
   r := resolver{
-    //dryrun: true,
+    dryrun: true,
     cache: &testcache{ data: make(map[string]string) },
     executor: testexecutor{},
     graph: buildGraph(nodes),
@@ -85,9 +86,13 @@ func main() {
 /*
 TODO
 
+- funnel executor
 - only run task once
+- connect to actual object stores
+- persistent cache
 - prevalidate graph before enabling execution
 - rethink taskhash() and hash() and hashing code in general
+- rethink executor and cache organization
 */
 
 
@@ -255,6 +260,7 @@ func (r *resolver) Resolve(k string) error {
 
   hash := r.hash(k, n.taskhash(), inputs)
 
+  // During dry-run mode, the hash might be empty.
   if hash != "" {
     // Check for a cached value. If the value already exists, there's nothing to do.
     if r.cache.isCached(k, hash) {
@@ -277,7 +283,10 @@ func (r *resolver) Resolve(k string) error {
   }
 
   fmt.Println("store: ", k, hash)
-  r.cache.store(k, hash)
+  // During dry-run mode, the hash might be empty.
+  if hash != "" {
+    r.cache.store(k, hash)
+  }
   return nil
 }
 
@@ -312,7 +321,9 @@ func (r *resolver) hash(k string, task string, inputs []string) string {
   var hashes []string
   for _, k := range inputs {
     h := r.graph[k].hash()
-    // If any of the deps can't be hashed, then the compositeHash can't be built.
+    // If any of the inputs can't be hashed, then the hash can't be built.
+    // This is useful for dry-run mode, when the intermediate cache might
+    // have missing values. During normal execution, a missing hash is a problem?
     if h == "" {
       return ""
     }
