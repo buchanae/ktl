@@ -4,16 +4,18 @@
 package main
 
 import (
+  "context"
   "fmt"
   "strings"
-  "path"
+  "path/filepath"
   "sort"
   "sync"
   "crypto/md5"
   "os"
-  "os/exec"
   "io"
   "github.com/ivaxer/go-xattr"
+  "github.com/golang/protobuf/jsonpb"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -29,42 +31,88 @@ func main() {
     alpineNode(s, "uniq-1", "uniq", "sort-1"),
     alpineNode(s, "md5-1", "md5sum", "uniq-1"),
     alpineNode(s, "md5-2", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-3", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-4", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-5", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-6", "md5sum", "uniq-1"),
+    alpineNode(s, "md5-7", "md5sum", "uniq-1"),
+    alpineNode(s, "final", "md5sum", "md5-1", "md5-2", "md5-3", "md5-4", "md5-5", "md5-6", "md5-7"),
+  }
+
+  cli, err := newTaskClient()
+  if err != nil {
+    panic(err)
   }
 
   r := resolver{
     //dryrun: true,
     //cache: &testcache{ data: make(map[string]string) },
-    cache: &localCache{base: "teststorage"},
-    executor: testexecutor{},
+    cache: &localCache{s: s},
+    executor: testexecutor{cli},
     graph: buildGraph(nodes),
   }
 
   for i := 0; i < 3; i++ {
-    err := r.Resolve("md5-1")
-    err2 := r.Resolve("md5-2")
-    fmt.Println("Resolve err: ", err, err2)
+    err := r.Resolve("final")
+    fmt.Println("Resolve err: ", err)
     fmt.Println("=======================")
   }
 }
 
-func alpineNode(s storage, name, cmd, in string) *node {
+type testexecutor struct {
+  client TaskServiceClient
+}
+func (t testexecutor) exec(n *node) error {
+  task := n.task()
+	mar := jsonpb.Marshaler{
+		EmitDefaults: true,
+		Indent:       "  ",
+	}
+  s, _ := mar.MarshalToString(task)
+  r, err := t.client.CreateTask(context.Background(), task)
+  if err != nil {
+    panic(err)
+  }
+  fmt.Println("Exec: ", n.name, s, r)
+
+  // TODO next. wait for task to finish.
+  //      want to have these things easily available from funnel.
+  return nil
+}
+
+func alpineNode(s *localStorage, name, cmd string, in ...string) *node {
   return &node{
     name: name,
-    inputs: []string{in},
-    task: func() {
-      cmd := exec.Command("docker", "run",
-        "-v", "/Users/buchanae/src/ktl/teststorage:/opt/teststorage",
-        "alpine",
-        cmd, "/opt/" + s.path(in),
-      )
+    inputs: in,
+    task: func() *Task {
+      t := Task{
+        Name: name,
+        Executors: []*Executor{
+          {
+            ImageName: "alpine",
+            Cmd: []string{cmd},
+            Stdout: "/w/stdout",
+            Workdir: "/w",
+          },
+        },
+        Outputs: []*TaskParameter{
+          {
+            Url: s.path(name),
+            Path: "/w/stdout",
+          },
+        },
+      }
 
-      fmt.Println("cmd:", cmd.Args)
+      for _, i := range in {
+        p := "/data/" + i
+        t.Executors[0].Cmd  = append(t.Executors[0].Cmd, p)
+        t.Inputs = append(t.Inputs, &TaskParameter{
+          Url: s.path(i),
+          Path: p,
+        })
+      }
 
-      out := s.path(name)
-      f, _ := os.Create(out)
-      defer f.Close()
-      cmd.Stdout = f
-      cmd.Run()
+      return &t
     },
     taskhash: func() string {
       return cmd
@@ -78,7 +126,7 @@ func alpineNode(s storage, name, cmd, in string) *node {
 func fileNode(s storage, key string) *node {
   return &node{
     name: key,
-    task: func() {},
+    task: func() *Task { return nil },
     taskhash: func() string {
       return "file://" + key
     },
@@ -127,14 +175,15 @@ type localStorage struct {
 }
 
 func (s *localStorage) path(key string) string {
-  return path.Join(s.base, key)
+  p, _ := filepath.Abs(filepath.Join(s.base, key))
+  return p
 }
 
 func (s *localStorage) hash(key string) string {
   s.mtx.Lock()
   defer s.mtx.Unlock()
 
-  f, err := os.Open(path.Join(s.base, key))
+  f, err := os.Open(filepath.Join(s.base, key))
 	if err != nil {
     return ""
 	}
@@ -149,33 +198,25 @@ func (s *localStorage) hash(key string) string {
 }
 
 type localCache struct {
-  base string
+  s *localStorage
   mtx sync.Mutex
 }
 func (t *localCache) store(k, h string) {
   t.mtx.Lock()
   defer t.mtx.Unlock()
 
-  p := path.Join(t.base, k)
+  p := t.s.path(k)
   xattr.Set(p, "ktl-hash", []byte(h))
 }
 func (t *localCache) isCached(k, h string) bool {
   t.mtx.Lock()
   defer t.mtx.Unlock()
 
-  p := path.Join(t.base, k)
+  p := t.s.path(k)
   if b, err := xattr.Get(p, "ktl-hash"); err == nil {
     return string(b) == h
   }
   return false
-}
-
-
-type testexecutor struct {}
-func (t testexecutor) exec(n *node) error {
-  fmt.Println("Exec: ", n.name)
-  n.task()
-  return nil
 }
 
 
@@ -202,7 +243,7 @@ func (t *testcache) isCached(k, h string) bool {
 type node struct {
   name string
   inputs []string
-  task func()
+  task func() *Task
   taskhash func() string
   hash func() string
 }
@@ -315,4 +356,16 @@ func (r *resolver) hash(k string, task string, inputs []string) string {
     base += "-" + strings.Join(hashes, "-")
   }
   return base
+}
+
+func newTaskClient() (TaskServiceClient, error) {
+	conn, err := grpc.Dial(
+    "localhost:9090",
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, err
+	}
+  return NewTaskServiceClient(conn), nil
 }
