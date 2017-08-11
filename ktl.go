@@ -5,6 +5,7 @@ package main
 
 import (
   "context"
+  "time"
   "fmt"
   "strings"
   "path/filepath"
@@ -48,7 +49,10 @@ func main() {
     //dryrun: true,
     //cache: &testcache{ data: make(map[string]string) },
     cache: &localCache{s: s},
-    executor: testexecutor{cli},
+    executor: &testexecutor{
+      client: cli,
+      cache: map[string]string{},
+    },
     graph: buildGraph(nodes),
   }
 
@@ -59,25 +63,87 @@ func main() {
   }
 }
 
+
 type testexecutor struct {
   client TaskServiceClient
+  cache map[string]string
+  mtx sync.Mutex
 }
-func (t testexecutor) exec(n *node) error {
-  task := n.task()
+
+var errNotHashable = fmt.Errorf("task not hashable")
+
+func hashTask(t *Task) (string, error) {
+  if t == nil {
+    return "", errNotHashable
+  }
 	mar := jsonpb.Marshaler{
 		EmitDefaults: true,
 		Indent:       "  ",
 	}
-  s, _ := mar.MarshalToString(task)
-  r, err := t.client.CreateTask(context.Background(), task)
-  if err != nil {
-    panic(err)
-  }
-  fmt.Println("Exec: ", n.name, s, r)
+  s, _ := mar.MarshalToString(t)
+  return s, nil
+}
 
-  // TODO next. wait for task to finish.
-  //      want to have these things easily available from funnel.
-  return nil
+func (t *testexecutor) getOrCreateTask(ctx context.Context, task *Task) (string, error) {
+  t.mtx.Lock()
+  defer t.mtx.Unlock()
+
+  var id string
+
+  if hash, err := hashTask(task); err == nil {
+    id = t.cache[hash]
+  }
+
+  fmt.Println("CACHE CHECK", id)
+  if id == "" {
+    r, err := t.client.CreateTask(ctx, task)
+    if err != nil {
+      return "", err
+    }
+    id = r.Id
+
+    if hash, err := hashTask(task); err == nil {
+      t.cache[hash] = id
+    }
+  }
+
+  return id, nil
+}
+
+func (t *testexecutor) exec(n *node) error {
+  ctx := context.TODO()
+
+  task := n.task()
+  if task == nil {
+    return nil
+  }
+
+  id, err := t.getOrCreateTask(ctx, task)
+  if err != nil {
+    return err
+  }
+  return t.waitForTask(ctx, id)
+}
+
+func (t *testexecutor) waitForTask(ctx context.Context, id string) error {
+  for {
+    r, err := t.client.GetTask(ctx, &GetTaskRequest{Id: id})
+    if err != nil {
+      return err
+    }
+
+    switch r.State {
+    case State_ERROR, State_SYSTEM_ERROR:
+      return fmt.Errorf("Task error")
+    case State_CANCELED:
+      return fmt.Errorf("Task canceled")
+    case State_COMPLETE:
+      return nil
+    default:
+      fmt.Println("State:", r.State.String())
+    }
+    time.Sleep(time.Second)
+  }
 }
 
 func alpineNode(s *localStorage, name, cmd string, in ...string) *node {
@@ -114,9 +180,6 @@ func alpineNode(s *localStorage, name, cmd string, in ...string) *node {
 
       return &t
     },
-    taskhash: func() string {
-      return cmd
-    },
     hash: func() string {
       return s.hash(name)
     },
@@ -127,9 +190,6 @@ func fileNode(s storage, key string) *node {
   return &node{
     name: key,
     task: func() *Task { return nil },
-    taskhash: func() string {
-      return "file://" + key
-    },
     hash: func() string {
       return s.hash(key)
     },
@@ -139,8 +199,6 @@ func fileNode(s storage, key string) *node {
 /*
 TODO
 
-- funnel executor
-- only run task once
 - connect to actual object stores
 - persistent cache
 - prevalidate graph before enabling execution
@@ -244,7 +302,6 @@ type node struct {
   name string
   inputs []string
   task func() *Task
-  taskhash func() string
   hash func() string
 }
 
@@ -279,7 +336,15 @@ func (r *resolver) Resolve(k string) error {
     return err
   }
 
-  hash := r.hash(k, n.taskhash(), inputs)
+  // Try to get the task hash. If the node does not have a hashable task,
+  // don't include it in the node hash. For example, a file input node does
+  // not have an associated task to hash.
+  var taskHash string
+  if h, err := hashTask(n.task()); err == nil {
+    taskHash = h
+  }
+
+  hash := r.hash(k, taskHash, inputs)
 
   // During dry-run mode, the hash might be empty.
   if hash != "" {
