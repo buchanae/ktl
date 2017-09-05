@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
   "github.com/spf13/cobra"
+  "time"
 )
 
 // RootCmd represents the root command
@@ -52,6 +53,8 @@ var statusCmd = &cobra.Command{
         if len(args) == 0 {
             return cmd.Help()
         }
+        // TODO might accidentally pass task files instead of directory
+        //      in which case, globTasks will break
         doStatus(globTasks(args))
         return nil
     },
@@ -77,6 +80,7 @@ var statusFlags = struct {
   path bool
   id bool
   state bool
+  duration bool
 }{}
 
 
@@ -100,6 +104,7 @@ func init() {
   f.BoolVar(&statusFlags.path, "path", statusFlags.path, "include path field")
   f.BoolVar(&statusFlags.id, "id", statusFlags.id, "include id field")
   f.BoolVar(&statusFlags.state, "state", statusFlags.state, "include state field")
+  f.BoolVar(&statusFlags.duration, "duration", statusFlags.duration, "include duration field")
 }
 
 type row struct {
@@ -108,6 +113,7 @@ type row struct {
   Path string
   State State
   IsLast bool
+  Duration time.Duration
 }
 
 func doStatus(args []string) {
@@ -115,7 +121,6 @@ func doStatus(args []string) {
   // Default column config
   if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state {
     statusFlags.id = true
-    statusFlags.base = true
     statusFlags.path = true
     statusFlags.state = true
   }
@@ -145,12 +150,23 @@ func doStatus(args []string) {
     rows = append(rows, &r)
 
     if id != "" {
-      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
+      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id, View: TaskView_FULL})
       if err != nil && !isNotFound(err) {
         panic(err)
       }
 
       r.State = resp.GetState()
+
+      if resp.Logs != nil && resp.Logs[0].StartTime != "" {
+        start, _ := time.Parse(time.RFC3339, resp.Logs[0].StartTime)
+
+        if resp.Logs[0].EndTime != "" {
+          end, _ := time.Parse(time.RFC3339, resp.Logs[0].EndTime)
+          r.Duration = end.Sub(start)
+        } else {
+          r.Duration = time.Since(start)
+        }
+      }
     }
   }
 
@@ -168,6 +184,8 @@ func doStatus(args []string) {
   for _, r := range filtered {
     var cols []string
 
+    // TODO oops! these are not OR'ed together!
+    //      this is the point where you realize a query language is needed
     if statusFlags.running && r.State != State_RUNNING {
       continue
     }
@@ -211,6 +229,9 @@ func doStatus(args []string) {
     }
     if statusFlags.state {
       cols = append(cols, r.State.String())
+    }
+    if statusFlags.duration {
+      cols = append(cols, r.Duration.String())
     }
 
     fmt.Println(strings.Join(cols, "\t"))

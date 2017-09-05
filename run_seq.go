@@ -42,8 +42,25 @@ func runSeq(args []string) {
   run := runner{cli: cli}
 
   for _, arg := range args {
-    if run.shouldStart(arg) {
-      fmt.Println("Starting", arg)
+    id := loadID(arg)
+
+    r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
+    if err != nil && !isNotFound(err) {
+      panic(err)
+    }
+
+    switch r.GetState() {
+    case State_QUEUED, State_INITIALIZING, State_RUNNING:
+      fmt.Println("Already running", arg)
+      return
+
+    case State_ERROR, State_SYSTEM_ERROR, State_CANCELED:
+      if restart {
+        run.startTask(arg)
+      }
+      return
+
+    case State_UNKNOWN:
       run.startTask(arg)
       return
     }
@@ -54,31 +71,8 @@ type runner struct {
   cli TaskServiceClient
 }
 
-func (run *runner) shouldStart(arg string) bool {
-  id := loadID(arg)
-
-  if id == "" {
-    return true
-  }
-
-  r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
-  if err != nil && !isNotFound(err) {
-    panic(err)
-  }
-
-  switch r.GetState() {
-  case State_ERROR, State_SYSTEM_ERROR, State_CANCELED:
-    if restart {
-      return true
-    }
-
-  case State_UNKNOWN:
-    return true
-  }
-  return false
-}
-
 func (run *runner) startTask(arg string) {
+  fmt.Println("Starting", arg)
 
   f, err := os.Open(arg)
   if err != nil {
