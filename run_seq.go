@@ -13,6 +13,7 @@ import (
   "os"
   "github.com/golang/protobuf/jsonpb"
   "github.com/spf13/cobra"
+  "google.golang.org/grpc"
 )
 
 var restart bool
@@ -23,7 +24,21 @@ var runCmd = &cobra.Command{
     if len(args) == 0 {
       return cmd.Help()
     }
-    runSeq(globTasks(args))
+
+    conn, err := grpc.Dial(
+      "funnel_server_1:9090",
+      grpc.WithInsecure(),
+      grpc.WithBlock(),
+    )
+    defer conn.Close()
+    if err != nil {
+      panic(err)
+    }
+    cli := NewTaskServiceClient(conn)
+
+    for _, arg := range args {
+      runSeq(globTasks(arg), cli)
+    }
     return nil
   },
 }
@@ -33,11 +48,7 @@ func init() {
   f.BoolVar(&restart, "restart", restart, "Restart failed tasks")
 }
 
-func runSeq(args []string) {
-  cli, err := newTaskClient("funnel_server_1:9090")
-  if err != nil {
-    panic(err)
-  }
+func runSeq(args []string, cli TaskServiceClient) {
 
   run := runner{cli: cli}
 
@@ -75,6 +86,8 @@ func (run *runner) startTask(arg string) {
   fmt.Println("Starting", arg)
 
   f, err := os.Open(arg)
+  defer f.Close()
+
   if err != nil {
     panic(err)
   }
@@ -97,6 +110,7 @@ func (run *runner) startTask(arg string) {
 func saveID(path, id string) {
   f, err := os.Create(path + ".id")
   defer f.Close()
+
   if err != nil {
     panic(err)
   }

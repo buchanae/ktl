@@ -5,6 +5,14 @@ Lessons:
 - checking the state of multiple, sequential tasks in parallel would help.
 */
 
+/*
+TODO
+- command to check the outputs of all nodes, to identify corrupt tasks which are marked as complete
+  but have missing outputs
+- close connections properly, to reduce error logs
+- use one connection and process, to reduce overhead and error logs
+*/
+
 import (
   "context"
   "strings"
@@ -38,12 +46,10 @@ func main() {
   }
 }
 
-func globTasks(dirs []string) []string {
+func globTasks(dir string) []string {
   var res []string
-  for _, dir := range dirs {
-    m, _ := filepath.Glob(filepath.Join(dir, "task*.json"))
-    res = append(res, m...)
-  }
+  m, _ := filepath.Glob(filepath.Join(dir, "task*.json"))
+  res = append(res, m...)
   return res
 }
 
@@ -53,9 +59,23 @@ var statusCmd = &cobra.Command{
         if len(args) == 0 {
             return cmd.Help()
         }
+
+        conn, err := grpc.Dial(
+          "funnel_server_1:9090",
+          grpc.WithInsecure(),
+          //grpc.WithBlock(),
+        )
+        defer conn.Close()
+        if err != nil {
+          panic(err)
+        }
+        cli := NewTaskServiceClient(conn)
+
         // TODO might accidentally pass task files instead of directory
         //      in which case, globTasks will break
-        doStatus(globTasks(args))
+        for _, arg := range args {
+          doStatus(globTasks(arg), cli)
+        }
         return nil
     },
 }
@@ -116,18 +136,13 @@ type row struct {
   Duration time.Duration
 }
 
-func doStatus(args []string) {
+func doStatus(args []string, cli TaskServiceClient) {
 
   // Default column config
   if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state {
     statusFlags.id = true
     statusFlags.path = true
     statusFlags.state = true
-  }
-
-  cli, err := newTaskClient("funnel_server_1:9090")
-  if err != nil {
-    panic(err)
   }
 
   if statusFlags.last {
@@ -257,16 +272,4 @@ func loadID(path string) string {
     panic(err)
   }
   return strings.Trim(string(b), "\n")
-}
-
-func newTaskClient(addr string) (TaskServiceClient, error) {
-	conn, err := grpc.Dial(
-    addr,
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		return nil, err
-	}
-  return NewTaskServiceClient(conn), nil
 }
