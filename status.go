@@ -11,6 +11,9 @@ TODO
   but have missing outputs
 - close connections properly, to reduce error logs
 - use one connection and process, to reduce overhead and error logs
+- could probably speed this up more by saving the IDs in a single database,
+  or some other trick that avoids opening hundreds of files (task content hash?)
+  - although, doesn't the OS cache these files?
 */
 
 import (
@@ -101,6 +104,7 @@ var statusFlags = struct {
   id bool
   state bool
   duration bool
+  minDuration time.Duration
 }{}
 
 
@@ -125,6 +129,7 @@ func init() {
   f.BoolVar(&statusFlags.id, "id", statusFlags.id, "include id field")
   f.BoolVar(&statusFlags.state, "state", statusFlags.state, "include state field")
   f.BoolVar(&statusFlags.duration, "duration", statusFlags.duration, "include duration field")
+  f.DurationVar(&statusFlags.minDuration, "min-duration", statusFlags.minDuration, "filter out rows where duration < min-duration")
 }
 
 type row struct {
@@ -139,7 +144,7 @@ type row struct {
 func doStatus(args []string, cli TaskServiceClient) {
 
   // Default column config
-  if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state {
+  if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state && !statusFlags.duration {
     statusFlags.id = true
     statusFlags.path = true
     statusFlags.state = true
@@ -229,6 +234,9 @@ func doStatus(args []string, cli TaskServiceClient) {
       continue
     }
     if statusFlags.done && !isDone(r.State) {
+      continue
+    }
+    if statusFlags.minDuration > 0 && r.Duration < statusFlags.minDuration {
       continue
     }
 

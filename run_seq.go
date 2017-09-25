@@ -8,7 +8,6 @@ Lessons:
 import (
   "context"
   "io"
-  "time"
   "fmt"
   "os"
   "github.com/golang/protobuf/jsonpb"
@@ -115,28 +114,6 @@ func saveID(path, id string) {
     panic(err)
   }
   f.WriteString(id)
-}
-
-
-func waitForTask(ctx context.Context, client TaskServiceClient, id string) error {
-  for {
-    r, err := client.GetTask(ctx, &GetTaskRequest{Id: id})
-    if err != nil {
-      return err
-    }
-
-    switch r.State {
-    case State_ERROR, State_SYSTEM_ERROR:
-      return fmt.Errorf("Task error")
-    case State_CANCELED:
-      return fmt.Errorf("Task canceled")
-    case State_COMPLETE:
-      return nil
-    default:
-      fmt.Println("State:", r.State.String())
-    }
-    time.Sleep(time.Second)
-  }
 }
 
 func loadTask(r io.Reader) (*Task, error) {
