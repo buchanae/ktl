@@ -73,12 +73,44 @@ var statusCmd = &cobra.Command{
           panic(err)
         }
         cli := NewTaskServiceClient(conn)
+        tasks := map[string]task{}
+        wg := sync.WaitGroup{}
 
         // TODO might accidentally pass task files instead of directory
         //      in which case, globTasks will break
         for _, arg := range args {
-          doStatus(globTasks(arg), cli)
+          for _, path := range globTasks(arg) {
+            wg.Add(1)
+            go func(path string) {
+              defer wg.Done()
+              ctx := context.Background()
+              id := loadID(path)
+              resp, err := cli.GetTask(ctx, &GetTaskRequest{
+                Id: id,
+                View: TaskView_BASIC,
+              })
+              if err != nil && !isNotFound(err) {
+                panic(err)
+              }
+              // TODO move this to use an http cache under the hood
+              //      so that keeping the map isn't necessary.
+              tasks[path] = task{Task: resp, path: path}
+            }(path)
+          }
         }
+
+        wg.Wait()
+
+        for _ arg := range args {
+          var ts []task
+          for _, path := range globTasks(arg) {
+            if t, ok := tasks[path]; ok {
+              ts = append(ts, t)
+            }
+          }
+          doStatus(ts)
+        }
+
         return nil
     },
 }
@@ -141,7 +173,15 @@ type row struct {
   Duration time.Duration
 }
 
-func doStatus(args []string, cli TaskServiceClient) {
+func getTask(cli TaskServiceClient) {
+}
+
+type task struct {
+  *Task
+  path string
+}
+
+func doStatus(tasks []task) {
 
   // Default column config
   if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state && !statusFlags.duration {
@@ -159,7 +199,6 @@ func doStatus(args []string, cli TaskServiceClient) {
   base := filepath.Dir(args[0])
 
   for i, arg := range args {
-    id := loadID(arg)
     r := row{
       ID: id,
       BasePath: base,
@@ -170,11 +209,6 @@ func doStatus(args []string, cli TaskServiceClient) {
     rows = append(rows, &r)
 
     if id != "" {
-      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id, View: TaskView_BASIC})
-      if isNotFound(err) {
-        //log.Print(err)
-        continue
-      }
       if err != nil {
         panic(err)
       }
