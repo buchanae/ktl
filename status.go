@@ -5,6 +5,17 @@ Lessons:
 - checking the state of multiple, sequential tasks in parallel would help.
 */
 
+/*
+TODO
+- command to check the outputs of all nodes, to identify corrupt tasks which are marked as complete
+  but have missing outputs
+- close connections properly, to reduce error logs
+- use one connection and process, to reduce overhead and error logs
+- could probably speed this up more by saving the IDs in a single database,
+  or some other trick that avoids opening hundreds of files (task content hash?)
+  - although, doesn't the OS cache these files?
+*/
+
 import (
   "context"
   "strings"
@@ -16,6 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
   "github.com/spf13/cobra"
+  "time"
 )
 
 // RootCmd represents the root command
@@ -37,12 +49,10 @@ func main() {
   }
 }
 
-func globTasks(dirs []string) []string {
+func globTasks(dir string) []string {
   var res []string
-  for _, dir := range dirs {
-    m, _ := filepath.Glob(filepath.Join(dir, "task*.json"))
-    res = append(res, m...)
-  }
+  m, _ := filepath.Glob(filepath.Join(dir, "task*.json"))
+  res = append(res, m...)
   return res
 }
 
@@ -52,7 +62,23 @@ var statusCmd = &cobra.Command{
         if len(args) == 0 {
             return cmd.Help()
         }
-        doStatus(globTasks(args))
+
+        conn, err := grpc.Dial(
+          "funnel_server_1:9090",
+          grpc.WithInsecure(),
+          //grpc.WithBlock(),
+        )
+        defer conn.Close()
+        if err != nil {
+          panic(err)
+        }
+        cli := NewTaskServiceClient(conn)
+
+        // TODO might accidentally pass task files instead of directory
+        //      in which case, globTasks will break
+        for _, arg := range args {
+          doStatus(globTasks(arg), cli)
+        }
         return nil
     },
 }
@@ -77,6 +103,8 @@ var statusFlags = struct {
   path bool
   id bool
   state bool
+  duration bool
+  minDuration time.Duration
 }{}
 
 
@@ -100,6 +128,8 @@ func init() {
   f.BoolVar(&statusFlags.path, "path", statusFlags.path, "include path field")
   f.BoolVar(&statusFlags.id, "id", statusFlags.id, "include id field")
   f.BoolVar(&statusFlags.state, "state", statusFlags.state, "include state field")
+  f.BoolVar(&statusFlags.duration, "duration", statusFlags.duration, "include duration field")
+  f.DurationVar(&statusFlags.minDuration, "min-duration", statusFlags.minDuration, "filter out rows where duration < min-duration")
 }
 
 type row struct {
@@ -108,21 +138,16 @@ type row struct {
   Path string
   State State
   IsLast bool
+  Duration time.Duration
 }
 
-func doStatus(args []string) {
+func doStatus(args []string, cli TaskServiceClient) {
 
   // Default column config
-  if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state {
+  if !statusFlags.id && !statusFlags.base && !statusFlags.path && !statusFlags.state && !statusFlags.duration {
     statusFlags.id = true
-    statusFlags.base = true
     statusFlags.path = true
     statusFlags.state = true
-  }
-
-  cli, err := newTaskClient("funnel_server_1:9090")
-  if err != nil {
-    panic(err)
   }
 
   if statusFlags.last {
@@ -145,12 +170,27 @@ func doStatus(args []string) {
     rows = append(rows, &r)
 
     if id != "" {
-      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
-      if err != nil && !isNotFound(err) {
+      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id, View: TaskView_BASIC})
+      if isNotFound(err) {
+        //log.Print(err)
+        continue
+      }
+      if err != nil {
         panic(err)
       }
 
       r.State = resp.GetState()
+
+      if resp.Logs != nil && resp.Logs[0].StartTime != "" {
+        start, _ := time.Parse(time.RFC3339, resp.Logs[0].StartTime)
+
+        if resp.Logs[0].EndTime != "" {
+          end, _ := time.Parse(time.RFC3339, resp.Logs[0].EndTime)
+          r.Duration = end.Sub(start)
+        } else {
+          r.Duration = time.Since(start)
+        }
+      }
     }
   }
 
@@ -168,6 +208,8 @@ func doStatus(args []string) {
   for _, r := range filtered {
     var cols []string
 
+    // TODO oops! these are not OR'ed together!
+    //      this is the point where you realize a query language is needed
     if statusFlags.running && r.State != State_RUNNING {
       continue
     }
@@ -198,6 +240,9 @@ func doStatus(args []string) {
     if statusFlags.done && !isDone(r.State) {
       continue
     }
+    if statusFlags.minDuration > 0 && r.Duration < statusFlags.minDuration {
+      continue
+    }
 
     // TODO cols should match the order of flags
     if statusFlags.id {
@@ -211,6 +256,9 @@ func doStatus(args []string) {
     }
     if statusFlags.state {
       cols = append(cols, r.State.String())
+    }
+    if statusFlags.duration {
+      cols = append(cols, r.Duration.String())
     }
 
     fmt.Println(strings.Join(cols, "\t"))
@@ -236,16 +284,4 @@ func loadID(path string) string {
     panic(err)
   }
   return strings.Trim(string(b), "\n")
-}
-
-func newTaskClient(addr string) (TaskServiceClient, error) {
-	conn, err := grpc.Dial(
-    addr,
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		return nil, err
-	}
-  return NewTaskServiceClient(conn), nil
 }

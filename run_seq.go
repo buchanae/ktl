@@ -8,11 +8,11 @@ Lessons:
 import (
   "context"
   "io"
-  "time"
   "fmt"
   "os"
   "github.com/golang/protobuf/jsonpb"
   "github.com/spf13/cobra"
+  "google.golang.org/grpc"
 )
 
 var restart bool
@@ -23,7 +23,21 @@ var runCmd = &cobra.Command{
     if len(args) == 0 {
       return cmd.Help()
     }
-    runSeq(globTasks(args))
+
+    conn, err := grpc.Dial(
+      "funnel_server_1:9090",
+      grpc.WithInsecure(),
+      grpc.WithBlock(),
+    )
+    defer conn.Close()
+    if err != nil {
+      panic(err)
+    }
+    cli := NewTaskServiceClient(conn)
+
+    for _, arg := range args {
+      runSeq(globTasks(arg), cli)
+    }
     return nil
   },
 }
@@ -33,17 +47,35 @@ func init() {
   f.BoolVar(&restart, "restart", restart, "Restart failed tasks")
 }
 
-func runSeq(args []string) {
-  cli, err := newTaskClient("funnel_server_1:9090")
-  if err != nil {
-    panic(err)
-  }
+func runSeq(args []string, cli TaskServiceClient) {
 
   run := runner{cli: cli}
 
   for _, arg := range args {
-    if run.shouldStart(arg) {
-      fmt.Println("Starting", arg)
+    id := loadID(arg)
+
+    if id == "" {
+      continue
+    }
+
+    fmt.Println("ID:", id)
+    r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
+    if err != nil && !isNotFound(err) {
+      panic(err)
+    }
+
+    switch r.GetState() {
+    case State_QUEUED, State_INITIALIZING, State_RUNNING:
+      fmt.Println("Already running", arg)
+      return
+
+    case State_ERROR, State_SYSTEM_ERROR, State_CANCELED:
+      if restart {
+        run.startTask(arg)
+      }
+      return
+
+    case State_UNKNOWN:
       run.startTask(arg)
       return
     }
@@ -54,33 +86,12 @@ type runner struct {
   cli TaskServiceClient
 }
 
-func (run *runner) shouldStart(arg string) bool {
-  id := loadID(arg)
-
-  if id == "" {
-    return true
-  }
-
-  r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
-  if err != nil && !isNotFound(err) {
-    panic(err)
-  }
-
-  switch r.GetState() {
-  case State_ERROR, State_SYSTEM_ERROR, State_CANCELED:
-    if restart {
-      return true
-    }
-
-  case State_UNKNOWN:
-    return true
-  }
-  return false
-}
-
 func (run *runner) startTask(arg string) {
+  fmt.Println("Starting", arg)
 
   f, err := os.Open(arg)
+  defer f.Close()
+
   if err != nil {
     panic(err)
   }
@@ -103,32 +114,11 @@ func (run *runner) startTask(arg string) {
 func saveID(path, id string) {
   f, err := os.Create(path + ".id")
   defer f.Close()
+
   if err != nil {
     panic(err)
   }
   f.WriteString(id)
-}
-
-
-func waitForTask(ctx context.Context, client TaskServiceClient, id string) error {
-  for {
-    r, err := client.GetTask(ctx, &GetTaskRequest{Id: id})
-    if err != nil {
-      return err
-    }
-
-    switch r.State {
-    case State_ERROR, State_SYSTEM_ERROR:
-      return fmt.Errorf("Task error")
-    case State_CANCELED:
-      return fmt.Errorf("Task canceled")
-    case State_COMPLETE:
-      return nil
-    default:
-      fmt.Println("State:", r.State.String())
-    }
-    time.Sleep(time.Second)
-  }
 }
 
 func loadTask(r io.Reader) (*Task, error) {
