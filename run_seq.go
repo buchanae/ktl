@@ -15,7 +15,18 @@ import (
   "google.golang.org/grpc"
 )
 
-var restart bool
+// State variables for convenience
+const (
+	Unknown      = State_UNKNOWN
+	Queued       = State_QUEUED
+	Running      = State_RUNNING
+	Paused       = State_PAUSED
+	Complete     = State_COMPLETE
+	Error        = State_ERROR
+	SystemError  = State_SYSTEM_ERROR
+	Canceled     = State_CANCELED
+	Initializing = State_INITIALIZING
+)
 
 var runCmd = &cobra.Command{
   Use: "run [taskdir...]",
@@ -24,84 +35,54 @@ var runCmd = &cobra.Command{
       return cmd.Help()
     }
 
-    conn, err := grpc.Dial(
-      "funnel_server_1:9090",
-      grpc.WithInsecure(),
-      grpc.WithBlock(),
-    )
-    defer conn.Close()
+    // Loader helps load tasks in parallel.
+    l, err := newLoader(serverHost)
     if err != nil {
-      panic(err)
+      return err
     }
-    cli := NewTaskServiceClient(conn)
 
+    // Load all tasks.
     for _, arg := range args {
-      runSeq(globTasks(arg), cli)
+      go l.loadDirectory(arg)
     }
+
     return nil
   },
 }
 
-func init() {
-  f := runCmd.Flags()
-  f.BoolVar(&restart, "restart", restart, "Restart failed tasks")
+func shouldStart(t Task, restart bool) bool {
+  switch t.GetState() {
+  case Queued, Initializing, Running:
+    return false
+
+  case Error, SystemError, Canceled:
+    return restart
+
+  case Unknown:
+    return true
+  }
+  return false
 }
 
 func runSeq(args []string, cli TaskServiceClient) {
 
-  run := runner{cli: cli}
-
   for _, arg := range args {
-    id := loadID(arg)
 
     if id == "" {
       continue
     }
-
     fmt.Println("ID:", id)
-    r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
-    if err != nil && !isNotFound(err) {
-      panic(err)
-    }
 
-    switch r.GetState() {
-    case State_QUEUED, State_INITIALIZING, State_RUNNING:
-      fmt.Println("Already running", arg)
-      return
-
-    case State_ERROR, State_SYSTEM_ERROR, State_CANCELED:
-      if restart {
-        run.startTask(arg)
-      }
-      return
-
-    case State_UNKNOWN:
-      run.startTask(arg)
-      return
+    if shouldStart(t) {
+      startTask(arg, cli)
     }
   }
 }
 
-type runner struct {
-  cli TaskServiceClient
-}
-
-func (run *runner) startTask(arg string) {
+func startTask(task Task, cli TaskServiceClient) {
   fmt.Println("Starting", arg)
 
-  f, err := os.Open(arg)
-  defer f.Close()
-
-  if err != nil {
-    panic(err)
-  }
-
-  task, err := loadTask(f)
-  if err != nil {
-    panic(err)
-  }
-
-  r, err := run.cli.CreateTask(context.Background(), task)
+  r, err := cli.CreateTask(context.Background(), task)
   if err != nil {
     panic(err)
   }

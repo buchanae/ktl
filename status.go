@@ -31,9 +31,15 @@ var rootCmd = &cobra.Command{
 }
 
 var serverHost string
+var restart bool
 
 func main() {
-	statusCmd.Flags().StringVar(&serverHost, "server", serverHost, "Server host name.")
+  runCmd.Flags().
+    BoolVar(&restart, "restart", restart, "Restart failed tasks.")
+
+	rootCmd.PersistentFlags().
+    StringVar(&serverHost, "server", serverHost, "Server host name.")
+
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(runCmd)
 
@@ -43,12 +49,79 @@ func main() {
 	}
 }
 
-func globTasks(dir string) []string {
+type loader struct {
+  tasks syncmap.Map
+  client TaskServiceClient
+  wg sync.WaitGroup
+}
+func newLoader(server string) (*loader, error) {
+  conn, err := grpc.Dial(
+    serverHost+":9090",
+    grpc.WithInsecure(),
+  )
+  defer conn.Close()
+  if err != nil {
+    return nil, err
+  }
+  cli := NewTaskServiceClient(conn)
+  return &loader{client: cli}, nil
+}
+func (l *loader) loadDirectory(path string) {
+  for _, p := range l.globDirectory(path) {
+	  l.wg.Add(1)
+    go l.loadTaskFile(p)
+  }
+}
+// loadTaskFile panics if the client request fails.
+func (l *loader) loadTaskFile(path string) {
+  defer l.wg.Done()
+  ctx := context.Background()
+  id := loadID(path)
+
+  var t *Task
+  if id != "" {
+    resp, err := l.client.GetTask(ctx, &GetTaskRequest{
+      Id:   id,
+      View: TaskView_BASIC,
+    })
+
+    if err != nil && !isNotFound(err) {
+      panic(err)
+    }
+    if isNotFound(err) {
+      t = &Task{Id: id}
+    } else {
+      t = resp
+    }
+  }
+
+  l.tasks.Store(path, t)
+}
+
+// wait blocks until the loader is done loading tasks.
+func (l *loader) wait() {
+  l.wg.Wait()
+}
+
+// getTask provides access to the loaded tasks, after loading is finished.
+func (l *loader) getTask(path string) (*Task, bool) {
+  l.wg.Wait()
+  i, ok := l.tasks.Load(path)
+  if !ok {
+    return nil, false
+  }
+  return i.(*Task), true
+}
+
+// globDirectory globs for task JSON files matching "task*.json"
+// in the given directory path.
+func (l *loader) globDirectory(path string) []string {
 	var res []string
-	m, _ := filepath.Glob(filepath.Join(dir, "task*.json"))
+	m, _ := filepath.Glob(filepath.Join(path, "task*.json"))
 	res = append(res, m...)
 	return res
 }
+
 
 var statusCmd = &cobra.Command{
 	Use: "status [task.json ...]",
@@ -57,61 +130,28 @@ var statusCmd = &cobra.Command{
 			return cmd.Help()
 		}
 
-		conn, err := grpc.Dial(
-			serverHost+":9090",
-			grpc.WithInsecure(),
-		)
-		defer conn.Close()
-		if err != nil {
-			panic(err)
-		}
-		cli := NewTaskServiceClient(conn)
-		tasks := syncmap.Map{}
-		wg := sync.WaitGroup{}
+    // Loader helps load tasks in parallel.
+    l, err := newLoader(serverHost)
+    if err != nil {
+      return err
+    }
 
+    // Load all task files. This also calls GetTask, in parallel,
+    // to get the latest task data, if a task ID exists.
+    //
 		// TODO might accidentally pass task files instead of directory
 		//      in which case, globTasks will break
 		for _, arg := range args {
-			for _, path := range globTasks(arg) {
-				wg.Add(1)
-
-				go func(path string) {
-					defer wg.Done()
-					ctx := context.Background()
-					id := loadID(path)
-
-					var t *Task
-					if id != "" {
-						resp, err := cli.GetTask(ctx, &GetTaskRequest{
-							Id:   id,
-							View: TaskView_BASIC,
-						})
-
-						if err != nil && !isNotFound(err) {
-							panic(err)
-						}
-						if isNotFound(err) {
-							t = &Task{Id: id}
-						} else {
-							t = resp
-						}
-					}
-
-					// TODO move this to use an http cache under the hood
-					//      so that keeping the map isn't necessary.
-					tasks.Store(path, task{Task: t, path: path})
-				}(path)
-			}
+      go l.loadDirectory(arg)
 		}
 
-		wg.Wait()
-		fmt.Fprintln(os.Stderr, "DONE loading")
-
+    // For each group (directory) of related tasks, get the group from the loader
+    // and pass it to doStatus().
 		for _, arg := range args {
 			var ts []task
-			for _, path := range globTasks(arg) {
-				if t, ok := tasks.Load(path); ok {
-					ts = append(ts, t.(task))
+			for _, path := range l.globDirectory(arg) {
+				if t, ok := l.getTask(path); ok {
+					ts = append(ts, t)
 				}
 			}
 			doStatus(ts)
@@ -175,9 +215,6 @@ type row struct {
 	State    State
 	IsLast   bool
 	Duration time.Duration
-}
-
-func getTask(cli TaskServiceClient) {
 }
 
 type task struct {
