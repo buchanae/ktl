@@ -54,6 +54,11 @@ func runSeq(args []string, cli TaskServiceClient) {
   for _, arg := range args {
     id := loadID(arg)
 
+    if id == "" {
+      continue
+    }
+
+    fmt.Println("ID:", id)
     r, err := run.cli.GetTask(context.Background(), &GetTaskRequest{Id: id})
     if err != nil && !isNotFound(err) {
       panic(err)

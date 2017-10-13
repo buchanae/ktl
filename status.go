@@ -170,8 +170,12 @@ func doStatus(args []string, cli TaskServiceClient) {
     rows = append(rows, &r)
 
     if id != "" {
-      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id, View: TaskView_FULL})
-      if err != nil && !isNotFound(err) {
+      resp, err := cli.GetTask(context.Background(), &GetTaskRequest{Id: id, View: TaskView_BASIC})
+      if isNotFound(err) {
+        //log.Print(err)
+        continue
+      }
+      if err != nil {
         panic(err)
       }
 
