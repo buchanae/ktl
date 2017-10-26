@@ -92,12 +92,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("RUN: %s\n", strings.Join(cmd_line, " "))
+	fmt.Printf("%s\n", strings.Join(cmd_line, " "))
 
 	outputs, _ := cmd.GetOutputMapping(env)
 
 	for _, out := range outputs {
-		fmt.Printf("OUTPUT %s Glob: %s\n", out.Id, out.Glob)
+		log.Printf("OUTPUT %s Glob: %s\n", out.Id, out.Glob)
 	}
 
 }
