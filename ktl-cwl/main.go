@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ohsu-comp-bio/ktl/cwl"
+	"github.com/ohsu-comp-bio/ktl/tes"
+	"github.com/golang/protobuf/jsonpb"
 	"io/ioutil"
 	"log"
 	"os"
@@ -17,6 +19,7 @@ func main() {
 	//var tmp_outdir_prefix_flag = flag.String("tmp-outdir-prefix", "./", "Temp output prefix")
 	//var tmpdir_prefix_flag = flag.String("tmpdir-prefix", "/tmp", "Tempdir prefix")
 	//var outdir = flag.String("outdir", "./", "Outdir")
+	var tes_flag = flag.Bool("tes", false, "TES Job Output")
 	var quiet_flag = flag.Bool("quiet", false, "quiet")
 	flag.Parse()
 
@@ -86,13 +89,26 @@ func main() {
 
 	env := cmd.SetDefaults(cwl.Environment{Inputs:inputs})
 
-	cmd_line, err := cmd.Render(env)
-	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
-		os.Exit(1)
+	
+	if *tes_flag {
+		tes_doc, err := tes.Render(cmd, env)
+		if err != nil {
+			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
+			os.Exit(1)
+		}
+		m := jsonpb.Marshaler{}
+		m.Indent = " "
+		tmes, _ := m.MarshalToString(&tes_doc)
+		fmt.Printf("%s\n", tmes)
+	} else {
+		cmd_line, err := cmd.Render(env)
+		if err != nil {
+			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
+			os.Exit(1)
+		}
+		fmt.Printf("%s\n", strings.Join(cmd_line, " "))		
 	}
 
-	fmt.Printf("%s\n", strings.Join(cmd_line, " "))
 
 	outputs, _ := cmd.GetOutputMapping(env)
 

@@ -17,6 +17,49 @@ type OutputMapping struct {
 	Glob []string
 }
 
+func getDockerImage(m map[string]interface{}) string {
+	if x, ok := m["id"]; ok {
+		if x == "DockerRequirement" {
+			return m["dockerPull"].(string)
+		}
+	}
+	return ""
+}
+
+func (self CommandLineTool) GetImageName() string {
+	out := ""
+	for _, i := range self.Hints {
+		m := AsMap(i)
+		s := getDockerImage(m)
+		if s != "" {
+			return s
+		}
+	}
+	for _, i := range self.Requirements {
+		m := AsMap(i)
+		s := getDockerImage(m)
+		if s != "" {
+			return s
+		}
+	}
+	return out
+}
+
+func (self CommandLineTool) GetMappedInputs(env Environment) []MappedInput {
+	out := []MappedInput{}
+	for _, i := range self.Inputs {
+		if i.Type.GetName() == "File" {
+			o := MappedInput{
+				StoragePath: env.Inputs[i.Id].(JSONDict)["path"].(string),
+				MappedPath: env.Inputs[i.Id].(JSONDict)["path"].(string),
+			}
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+
 func (self CommandLineTool) SetDefaults(env Environment) Environment {
 	out := env
 	for _, x := range self.Inputs {

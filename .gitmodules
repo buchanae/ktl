@@ -1,0 +1,9 @@
+[submodule "tes"]
+	path = tes
+	url = https://github.com/ga4gh/task-execution-schemas
+[submodule "googleapis"]
+	path = googleapis
+	url = https://github.com/googleapis/googleapis.git
+[submodule "task-execution-schemas"]
+	path = task-execution-schemas
+	url = https://github.com/ga4gh/task-execution-schemas.git
