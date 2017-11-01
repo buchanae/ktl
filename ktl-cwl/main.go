@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/ohsu-comp-bio/ktl/cwl"
 	"github.com/ohsu-comp-bio/ktl/tes"
-	"github.com/golang/protobuf/jsonpb"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,9 +18,10 @@ func main() {
 	var version_flag = flag.Bool("version", false, "version")
 	//var tmp_outdir_prefix_flag = flag.String("tmp-outdir-prefix", "./", "Temp output prefix")
 	//var tmpdir_prefix_flag = flag.String("tmpdir-prefix", "/tmp", "Tempdir prefix")
-	//var outdir = flag.String("outdir", "./", "Outdir")
+	var outdir = flag.String("outdir", "./", "Outdir")
 	var tes_flag = flag.Bool("tes", false, "TES Job Output")
 	var quiet_flag = flag.Bool("quiet", false, "quiet")
+	//var out_path = flag.String("out", false, "outdir")
 	flag.Parse()
 
 	if *version_flag {
@@ -52,7 +53,7 @@ func main() {
 	}
 	//log.Printf("CWLDoc: %#v", cwl_docs)
 	var inputs cwl.JSONDict
-	var mapper cwl.URLDockerMapper
+	mapper := cwl.URLDockerMapper{*outdir}
 	if len(flag.Args()) == 1 {
 		inputs = cwl.JSONDict{}
 	} else {
@@ -88,11 +89,10 @@ func main() {
 
 	cmd := cwl_doc.CommandLineTool()
 
-	env := cmd.SetDefaults(cwl.Environment{Inputs:inputs})
-
+	env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
 
 	if *tes_flag {
-		tes_doc, err := tes.Render(cmd, env)
+		tes_doc, err := tes.Render(cmd, mapper, env)
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 			os.Exit(1)
@@ -102,14 +102,13 @@ func main() {
 		tmes, _ := m.MarshalToString(&tes_doc)
 		fmt.Printf("%s\n", tmes)
 	} else {
-		cmd_line, err := cmd.Render(env)
+		cmd_line, err := cmd.Render(mapper, env)
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 			os.Exit(1)
 		}
 		fmt.Printf("%s\n", strings.Join(cmd_line, " "))
 	}
-
 
 	outputs, _ := cmd.GetOutputMapping(env)
 

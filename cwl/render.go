@@ -45,20 +45,19 @@ func (self CommandLineTool) GetImageName() string {
 	return out
 }
 
-func (self CommandLineTool) GetMappedInputs(env Environment) []MappedInput {
+func (self CommandLineTool) GetMappedInputs(mapper FileMapper, env Environment) []MappedInput {
 	out := []MappedInput{}
 	for _, i := range self.Inputs {
 		if i.Type.GetName() == "File" {
 			o := MappedInput{
 				StoragePath: env.Inputs[i.Id].(JSONDict)["path"].(string),
-				MappedPath: env.Inputs[i.Id].(JSONDict)["path"].(string),
+				MappedPath:  mapper.Storage2Volume(env.Inputs[i.Id].(JSONDict)["path"].(string)),
 			}
 			out = append(out, o)
 		}
 	}
 	return out
 }
-
 
 func (self CommandLineTool) SetDefaults(env Environment) Environment {
 	out := env
@@ -90,7 +89,7 @@ func (self CommandLineTool) GetOutputMapping(env Environment) ([]OutputMapping, 
 	return out, nil
 }
 
-func (self CommandLineTool) Render(env Environment) ([]string, error) {
+func (self CommandLineTool) Render(mapper FileMapper, env Environment) ([]string, error) {
 
 	log.Printf("CommandLineTool Evalute")
 
@@ -114,7 +113,7 @@ func (self CommandLineTool) Render(env Environment) ([]string, error) {
 
 	//Inputs
 	for _, x := range self.Inputs {
-		new_args, err := x.Evaluate(env)
+		new_args, err := x.Evaluate(mapper, env)
 		if err != nil {
 			log.Printf("Input Error: %s", err)
 			return []string{}, err
@@ -171,7 +170,7 @@ func (self CommandLineBinding) Evaluate(env Environment) ([]string, error) {
 	return out, nil
 }
 
-func (self CommandInputParameter) Evaluate(env Environment) ([]string, error) {
+func (self CommandInputParameter) Evaluate(mapper FileMapper, env Environment) ([]string, error) {
 	out := []string{}
 	if self.InputBinding != nil {
 		if len(self.InputBinding.Prefix) > 0 {
@@ -185,30 +184,29 @@ func (self CommandInputParameter) Evaluate(env Environment) ([]string, error) {
 			}
 			out = append(out, result)
 		} else {
-      v := self.Type.Evaluate(env.Inputs[self.Id])
-      if len(self.InputBinding.ItemSeparator) > 0 {
-        v = array_join(v, self.InputBinding.ItemSeparator)
-      }
-      out = append(out, v...)
+			v := self.Type.Evaluate(env.Inputs[self.Id], mapper)
+			if len(self.InputBinding.ItemSeparator) > 0 {
+				v = array_join(v, self.InputBinding.ItemSeparator)
+			}
+			out = append(out, v...)
 		}
 	}
 	return out, nil
 }
 
-func (self TypeRecord) Evaluate(v interface{}) []string {
+func (self TypeRecord) Evaluate(v interface{}, mapper FileMapper) []string {
 	switch r := self.GetType().(type) {
 	case *TypeRecord_Name:
 		if x, ok := v.(JSONDict); ok {
 			if y, ok := x["class"]; ok {
 				if y == "File" {
 					if z, ok := x["path"]; ok {
-						return []string{fmt.Sprintf("%s", z)}
+						return []string{mapper.Storage2Volume(z.(string))}
 					} else if z, ok := x["location"]; ok {
-						return []string{fmt.Sprintf("%s", z)}
+						return []string{mapper.Storage2Volume(z.(string))}
 					}
 				}
 			}
-      log.Printf("Is DICT")
 		}
 		if isString(v) {
 			return []string{fmt.Sprintf("%s", v)}
@@ -220,13 +218,13 @@ func (self TypeRecord) Evaluate(v interface{}) []string {
 		out := []string{}
 		data := v.([]interface{})
 		for i := range data {
-			for _, s := range r.Array.Items.Evaluate(data[i]) {
+			for _, s := range r.Array.Items.Evaluate(data[i], mapper) {
 				out = append(out, s)
 			}
 		}
 		return out
-  default:
-    log.Printf("Missing TypeRecord Evaluate %T %T", self.GetType(), v)
+	default:
+		log.Printf("Missing TypeRecord Evaluate %T %T", self.GetType(), v)
 	}
 	return []string{}
 }

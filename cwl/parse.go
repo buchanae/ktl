@@ -46,7 +46,7 @@ func YamlLoad(path string) (JSONDict, error) {
 }
 
 func InputParse(path string, mapper FileMapper) (JSONDict, error) {
-  doc, err := YamlLoad(path)
+	doc, err := YamlLoad(path)
 
 	x, _ := filepath.Abs(path)
 	base_path := filepath.Dir(x)
@@ -62,9 +62,9 @@ func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interfa
 			if class == "File" {
 				for k, v := range base {
 					if k == "path" {
-						out["path"] = mapper.AdjustPath(basePath, v.(string))
+						out["path"] = mapper.Input2Storage(basePath, v.(string))
 					} else if k == "location" {
-						out["location"] = mapper.AdjustPath(basePath, v.(string))
+						out["location"] = mapper.Input2Storage(basePath, v.(string))
 					} else {
 						out[k] = v
 					}
@@ -72,9 +72,9 @@ func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interfa
 			} else if class == "Directory" {
 				for k, v := range base {
 					if k == "path" {
-						out["path"] = mapper.AdjustPath(basePath, v.(string))
+						out["path"] = mapper.Input2Storage(basePath, v.(string))
 					} else if k == "location" {
-						out["location"] = mapper.AdjustPath(basePath, v.(string))
+						out["location"] = mapper.Input2Storage(basePath, v.(string))
 					} else {
 						out[k] = v
 					}
@@ -334,5 +334,7 @@ func FixCommandLineTool(doc JSONDict) JSONDict {
 	if x, ok := doc["arguments"]; ok {
 		doc["arguments"] = FixCommandLineBindingList(x.([]interface{}))
 	}
+	//undo stdout capture shortcuts
+
 	return doc
 }
