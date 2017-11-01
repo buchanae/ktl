@@ -52,11 +52,12 @@ func main() {
 	}
 	//log.Printf("CWLDoc: %#v", cwl_docs)
 	var inputs cwl.JSONDict
+	var mapper cwl.URLDockerMapper
 	if len(flag.Args()) == 1 {
 		inputs = cwl.JSONDict{}
 	} else {
 		var err error
-		inputs, err = cwl.InputParse(flag.Arg(1))
+		inputs, err = cwl.InputParse(flag.Arg(1), mapper)
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Unable to parse Input document: %s\n", err))
 			os.Exit(1)
@@ -89,7 +90,7 @@ func main() {
 
 	env := cmd.SetDefaults(cwl.Environment{Inputs:inputs})
 
-	
+
 	if *tes_flag {
 		tes_doc, err := tes.Render(cmd, env)
 		if err != nil {
@@ -106,7 +107,7 @@ func main() {
 			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 			os.Exit(1)
 		}
-		fmt.Printf("%s\n", strings.Join(cmd_line, " "))		
+		fmt.Printf("%s\n", strings.Join(cmd_line, " "))
 	}
 
 

@@ -45,26 +45,26 @@ func YamlLoad(path string) (JSONDict, error) {
 	return out.(JSONDict), nil
 }
 
-func InputParse(path string) (JSONDict, error) {
+func InputParse(path string, mapper FileMapper) (JSONDict, error) {
   doc, err := YamlLoad(path)
 
 	x, _ := filepath.Abs(path)
 	base_path := filepath.Dir(x)
 
-	out := AdjustInputs(doc, base_path).(JSONDict)
+	out := AdjustInputs(doc, base_path, mapper).(JSONDict)
 	return out, err
 }
 
-func AdjustInputs(input interface{}, basePath string) interface{} {
+func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interface{} {
 	if base, ok := input.(JSONDict); ok {
 		out := JSONDict{}
 		if class, ok := base["class"]; ok {
 			if class == "File" {
 				for k, v := range base {
 					if k == "path" {
-						out["path"] = filepath.Join(basePath, v.(string))
+						out["path"] = mapper.AdjustPath(basePath, v.(string))
 					} else if k == "location" {
-						out["location"] = filepath.Join(basePath, v.(string))
+						out["location"] = mapper.AdjustPath(basePath, v.(string))
 					} else {
 						out[k] = v
 					}
@@ -72,9 +72,9 @@ func AdjustInputs(input interface{}, basePath string) interface{} {
 			} else if class == "Directory" {
 				for k, v := range base {
 					if k == "path" {
-						out["path"] = filepath.Join(basePath, v.(string))
+						out["path"] = mapper.AdjustPath(basePath, v.(string))
 					} else if k == "location" {
-						out["location"] = filepath.Join(basePath, v.(string))
+						out["location"] = mapper.AdjustPath(basePath, v.(string))
 					} else {
 						out[k] = v
 					}
@@ -84,14 +84,14 @@ func AdjustInputs(input interface{}, basePath string) interface{} {
 			}
 		} else {
 			for k, v := range base {
-				out[k] = AdjustInputs(v, basePath)
+				out[k] = AdjustInputs(v, basePath, mapper)
 			}
 		}
 		return out
 	} else if base, ok := input.([]interface{}); ok {
 		out := []interface{}{}
 		for _, i := range base {
-			out = append(out, AdjustInputs(i, basePath))
+			out = append(out, AdjustInputs(i, basePath, mapper))
 		}
 		return out
 	}
