@@ -106,7 +106,7 @@ func (self CommandLineTool) Render(mapper FileMapper, env Environment) ([]string
 			log.Printf("Argument Error: %s", err)
 			return []string{}, err
 		}
-		for _, y := range new_args {
+		for _, y := range new_args.ToArray() {
 			args = append(args, JobArgument{*x, "", y})
 		}
 	}
@@ -118,7 +118,7 @@ func (self CommandLineTool) Render(mapper FileMapper, env Environment) ([]string
 			log.Printf("Input Error: %s", err)
 			return []string{}, err
 		}
-		for _, y := range new_args {
+		for _, y := range new_args.ToArray() {
 			args = append(args, JobArgument{*x.InputBinding, "", y})
 		}
 	}
@@ -155,76 +155,75 @@ func (self jobArgArray) Swap(i, j int) {
 	(self)[i], (self)[j] = (self)[j], (self)[i]
 }
 
-func (self CommandLineBinding) Evaluate(env Environment) ([]string, error) {
+func (self CommandLineBinding) Evaluate(env Environment) (StringTree, error) {
 	//log.Printf("binding: %#v", self)
-	out := []string{}
+	out := NewStringTree()
 	if len(self.Prefix) > 0 {
-		out = append(out, self.Prefix)
+		out = out.Append(self.Prefix)
 	}
 	eval := JSEvaluator{Inputs: env.Inputs, Outputs: env.Outputs, Runtime: env.Runtime}
 	result, err := eval.EvaluateExpressionString(self.ValueFrom, nil)
 	if err != nil {
-		return []string{}, err
+		return NewStringTree(), err
 	}
-	out = append(out, result)
+	out = out.Append(result)
 	return out, nil
 }
 
-func (self CommandInputParameter) Evaluate(mapper FileMapper, env Environment) ([]string, error) {
-	out := []string{}
+func (self CommandInputParameter) Evaluate(mapper FileMapper, env Environment) (StringTree, error) {
+	out := NewStringTree()
 	if self.InputBinding != nil {
 		if len(self.InputBinding.Prefix) > 0 {
-			out = append(out, self.InputBinding.Prefix)
+			out = out.Append(self.InputBinding.Prefix)
 		}
 		if len(self.InputBinding.ValueFrom) > 0 {
 			eval := JSEvaluator{Inputs: env.Inputs, Outputs: env.Outputs, Runtime: env.Runtime}
 			result, err := eval.EvaluateExpressionString(self.InputBinding.ValueFrom, nil)
 			if err != nil {
-				return []string{}, err
+				return NewStringTree(), err
 			}
-			out = append(out, result)
+			out = out.Append(result)
 		} else {
 			v := self.Type.Evaluate(env.Inputs[self.Id], mapper)
 			if len(self.InputBinding.ItemSeparator) > 0 {
-				v = array_join(v, self.InputBinding.ItemSeparator)
+				v = v.SetSeperator(self.InputBinding.ItemSeparator)
 			}
-			out = append(out, v...)
+			out = out.Extend(v)
 		}
 	}
 	return out, nil
 }
 
-func (self TypeRecord) Evaluate(v interface{}, mapper FileMapper) []string {
+func (self TypeRecord) Evaluate(v interface{}, mapper FileMapper) StringTree {
 	switch r := self.GetType().(type) {
 	case *TypeRecord_Name:
 		if x, ok := v.(JSONDict); ok {
 			if y, ok := x["class"]; ok {
 				if y == "File" {
 					if z, ok := x["path"]; ok {
-						return []string{mapper.Storage2Volume(z.(string))}
+						return String2Tree(mapper.Storage2Volume(z.(string)))
 					} else if z, ok := x["location"]; ok {
-						return []string{mapper.Storage2Volume(z.(string))}
+						return String2Tree(mapper.Storage2Volume(z.(string)))
 					}
 				}
 			}
 		}
 		if isString(v) {
-			return []string{fmt.Sprintf("%s", v)}
+			return String2Tree(fmt.Sprintf("%s", v))
 		}
 		if isInt(v) {
-			return []string{fmt.Sprintf("%d", v)}
+			return String2Tree(fmt.Sprintf("%d", v))
 		}
 	case *TypeRecord_Array:
-		out := []string{}
+		out := NewStringTree()
 		data := v.([]interface{})
 		for i := range data {
-			for _, s := range r.Array.Items.Evaluate(data[i], mapper) {
-				out = append(out, s)
-			}
+			s := r.Array.Items.Evaluate(data[i], mapper)
+			out = out.Extend(s)
 		}
 		return out
 	default:
 		log.Printf("Missing TypeRecord Evaluate %T %T", self.GetType(), v)
 	}
-	return []string{}
+	return NewStringTree()
 }
