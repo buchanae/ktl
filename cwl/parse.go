@@ -240,7 +240,11 @@ func FixTypeRecord(doc interface{}) JSONDict {
 	if isDict(doc) {
 		doc_dict := doc.(JSONDict)
 		if doc_dict["type"] == "array" {
-			return JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
+			o := JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
+			if x, ok := doc_dict["inputBinding"]; ok {
+				o["inputBinding"] = x
+			}
+			return o
 		}
 		if doc_dict["type"] == "record" {
 			doc_fields_list := doc_dict["fields"].([]interface{})

@@ -222,6 +222,7 @@ message TypeRecord {
         RecordRecord record = 4;
         EnumRecord enum = 5;
     }
+    CommandLineBinding inputBinding = 6;
 }
 
 message RunRecord {

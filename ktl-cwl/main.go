@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/ohsu-comp-bio/ktl/cwl"
+	"github.com/ohsu-comp-bio/ktl/engine"
 	"github.com/ohsu-comp-bio/ktl/tes"
 	"io/ioutil"
 	"log"
@@ -19,7 +20,8 @@ func main() {
 	//var tmp_outdir_prefix_flag = flag.String("tmp-outdir-prefix", "./", "Temp output prefix")
 	//var tmpdir_prefix_flag = flag.String("tmpdir-prefix", "/tmp", "Tempdir prefix")
 	var outdir = flag.String("outdir", "./", "Outdir")
-	var tes_flag = flag.Bool("tes", false, "TES Job Output")
+	var print_flag = flag.Bool("print", false, "Print TES Job")
+	var tes_server = flag.String("tes", "http://localhost:8000", "TES Server")
 	var quiet_flag = flag.Bool("quiet", false, "quiet")
 	//var out_path = flag.String("out", false, "outdir")
 	flag.Parse()
@@ -91,7 +93,7 @@ func main() {
 
 	env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
 
-	if *tes_flag {
+	if *print_flag {
 		tes_doc, err := tes.Render(cmd, mapper, env)
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
@@ -102,18 +104,9 @@ func main() {
 		tmes, _ := m.MarshalToString(&tes_doc)
 		fmt.Printf("%s\n", tmes)
 	} else {
-		cmd_line, err := cmd.Render(mapper, env)
-		if err != nil {
-			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
-			os.Exit(1)
-		}
-		fmt.Printf("%s\n", strings.Join(cmd_line, " "))
-	}
-
-	outputs, _ := cmd.GetOutputMapping(env)
-
-	for _, out := range outputs {
-		log.Printf("OUTPUT %s Glob: %s\n", out.Id, out.Glob)
+		cwl_engine := engine.NewEngine(*tes_server)
+		outputs, _ := cwl_engine.Run(cmd, mapper, env)
+		fmt.Printf("%s\n", outputs)
 	}
 
 }

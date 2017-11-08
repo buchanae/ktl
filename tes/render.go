@@ -38,7 +38,7 @@ func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment)
 	}
 	out.Volumes = []string{cwl.DOCKER_WORK_DIR}
 	output := TaskParameter{
-		Url:  mapper.Volume2Storage(cwl.DOCKER_WORK_DIR),
+		Url:  mapper.StoragePath("output"),
 		Path: cwl.DOCKER_WORK_DIR,
 		Type: FileType_DIRECTORY,
 	}

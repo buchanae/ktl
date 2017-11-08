@@ -1,6 +1,5 @@
 package cwl
 
-
 func (self CommandLineTool) CommandLineTool() CommandLineTool {
-  return self
+	return self
 }

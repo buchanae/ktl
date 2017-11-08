@@ -10,13 +10,11 @@ import (
 var EXP_RE_STRING, _ = regexp.Compile(`(.*)\$\((.*)\)(.*)`)
 var EXP_RE, _ = regexp.Compile(`\$\((.*)\)`)
 
-
 type JSEvaluator struct {
 	Inputs  JSONDict
 	Runtime JSONDict
 	Outputs JSONDict
 }
-
 
 func (self *JSEvaluator) EvaluateExpressionString(expression string, js_self *JSONDict) (string, error) {
 

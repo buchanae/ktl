@@ -47,13 +47,26 @@ func (self CommandLineTool) GetImageName() string {
 
 func (self CommandLineTool) GetMappedInputs(mapper FileMapper, env Environment) []MappedInput {
 	out := []MappedInput{}
+	fmt.Printf("InputMap: %s\n", env.Inputs)
 	for _, i := range self.Inputs {
 		if i.Type.GetName() == "File" {
-			o := MappedInput{
-				StoragePath: env.Inputs[i.Id].(JSONDict)["path"].(string),
-				MappedPath:  mapper.Storage2Volume(env.Inputs[i.Id].(JSONDict)["path"].(string)),
+			if input, ok := env.Inputs[i.Id]; ok {
+				fmt.Printf("Input: %s %s\n", i.Id, input)
+				input_dict := input.(JSONDict)
+				if p, ok := input_dict["path"]; ok {
+					o := MappedInput{
+						StoragePath: p.(string),
+						MappedPath:  mapper.Storage2Volume(p.(string)),
+					}
+					out = append(out, o)
+				} else if p, ok := input_dict["location"]; ok {
+					o := MappedInput{
+						StoragePath: p.(string),
+						MappedPath:  mapper.Storage2Volume(p.(string)),
+					}
+					out = append(out, o)
+				}
 			}
-			out = append(out, o)
 		}
 	}
 	return out
@@ -64,7 +77,11 @@ func (self CommandLineTool) SetDefaults(env Environment) Environment {
 	for _, x := range self.Inputs {
 		if _, ok := env.Inputs[x.Id]; !ok {
 			if x.Default != nil {
-				out.Inputs[x.Id] = x.Default.GetStringValue() //BUG: This could be a none string value
+				if y, ok := x.Default.GetData().(*DataRecord_StringValue); ok {
+					out.Inputs[x.Id] = y.StringValue
+				} else if y, ok := x.Default.GetData().(*DataRecord_StructValue); ok {
+					out.Inputs[x.Id] = AsMap(y.StructValue)
+				}
 			}
 		}
 	}
@@ -218,6 +235,11 @@ func (self TypeRecord) Evaluate(v interface{}, mapper FileMapper) StringTree {
 		out := NewStringTree()
 		data := v.([]interface{})
 		for i := range data {
+			if self.InputBinding != nil {
+				if self.InputBinding.Prefix != "" {
+					out = out.Append(self.InputBinding.Prefix)
+				}
+			}
 			s := r.Array.Items.Evaluate(data[i], mapper)
 			out = out.Extend(s)
 		}

@@ -19,6 +19,7 @@ type FileMapper interface {
 	Input2Storage(basePath string, path string) string
 	Storage2Volume(path string) string
 	Volume2Storage(path string) string
+	StoragePath(path string) string
 }
 
 type URLDockerMapper struct {
@@ -44,6 +45,11 @@ func (self URLDockerMapper) Storage2Volume(path string) string {
 func (self URLDockerMapper) Volume2Storage(path string) string {
 	u, _ := url.Parse(self.StorageBase)
 	u.Path = filepath.Join(u.Path, "output", filepath.Base(path))
+	return u.String()
+}
 
+func (self URLDockerMapper) StoragePath(path string) string {
+	u, _ := url.Parse(self.StorageBase)
+	u.Path = filepath.Join(u.Path, path)
 	return u.String()
 }

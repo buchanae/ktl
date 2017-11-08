@@ -1,12 +1,11 @@
 package cwl
 
 import (
-  structpb "github.com/golang/protobuf/ptypes/struct"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
-
-func AsMap(src *structpb.Struct) map[string]interface{} {
-	out := map[string]interface{}{}
+func AsMap(src *structpb.Struct) JSONDict {
+	out := JSONDict{}
 	for k, f := range src.Fields {
 		if v, ok := f.Kind.(*structpb.Value_StringValue); ok {
 			out[k] = v.StringValue

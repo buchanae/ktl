@@ -1,14 +1,13 @@
-
 package cwl
 
 type JSONDict map[string]interface{}
 
 type CWLDoc interface {
-  CommandLineTool() CommandLineTool
+	CommandLineTool() CommandLineTool
 }
 
 type CWLParser struct {
-	Path     string
+	Path string
 	//Schemas  map[string]Schema
 	Elements map[string]CWLDoc
 }
@@ -17,7 +16,6 @@ type CWLGraph struct {
 	Elements map[string]CWLDoc
 	Main     string
 }
-
 
 type UnsupportedRequirement struct {
 	Message string
