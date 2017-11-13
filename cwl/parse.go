@@ -114,7 +114,9 @@ func Parse(cwl_path string) (CWLGraph, error) {
 		}
 		log.Printf("Parsed: %s\n", jdoc)
 		cmd := CommandLineTool{}
-		err = jsonpb.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
+
+		umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
+		err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
 		if err != nil {
 			log.Printf("SchemaParseError: %s", err)
 			return CWLGraph{}, fmt.Errorf("Unable to parse file")

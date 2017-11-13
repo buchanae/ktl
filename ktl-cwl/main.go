@@ -20,6 +20,7 @@ func main() {
 	//var tmp_outdir_prefix_flag = flag.String("tmp-outdir-prefix", "./", "Temp output prefix")
 	//var tmpdir_prefix_flag = flag.String("tmpdir-prefix", "/tmp", "Tempdir prefix")
 	var outdir = flag.String("outdir", "./", "Outdir")
+	var proto_flag = flag.Bool("proto", false, "Print CWL Proto")
 	var print_flag = flag.Bool("print", false, "Print TES Job")
 	var tes_server = flag.String("tes", "http://localhost:8000", "TES Server")
 	var quiet_flag = flag.Bool("quiet", false, "quiet")
@@ -86,8 +87,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Printf("%#v\n", cwl_doc)
-	log.Printf("%#v\n", inputs)
+	if *proto_flag {
+		//log.Printf("%#v\n", cwl_doc)
+		marsh := jsonpb.Marshaler{Indent: "  "}
+		cmd := cwl_doc.CommandLineTool()
+		txt, _ := marsh.MarshalToString(&cmd)
+		fmt.Printf("%s", txt)
+		os.Exit(0)
+	}
+	//log.Printf("%#v\n", inputs)
 
 	cmd := cwl_doc.CommandLineTool()
 

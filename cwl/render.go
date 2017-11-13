@@ -23,6 +23,11 @@ func getDockerImage(m map[string]interface{}) string {
 			return m["dockerPull"].(string)
 		}
 	}
+	if x, ok := m["class"]; ok {
+		if x == "DockerRequirement" {
+			return m["dockerPull"].(string)
+		}
+	}
 	return ""
 }
 
