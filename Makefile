@@ -27,3 +27,12 @@ cwl.avsc:
 
 common-workflow-language:
 	git clone https://github.com/common-workflow-language/common-workflow-language.git
+
+dag: blank
+	protoc \
+	-I dag -I googleapis -I task-execution-schemas  \
+	--go_out=dag\
+	Mgoogle/protobuf/struct.proto=github.com/golang/protobuf/ptypes/struct:./dag/ \
+	dag.proto
+
+blank: 
