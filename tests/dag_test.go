@@ -4,37 +4,77 @@ package dag
 
 import (
   "log"
+  //"sync"
   "fmt"
+  "time"
   "math/rand"
   "testing"
   "github.com/ohsu-comp-bio/ktl/dag"
 )
 
+func choose(in []string, count int) []string {
+  t := make(map[int32]bool, count)
+  for ; len(t) < count && len(t) < len(in) ; {
+    t[ rand.Int31n(int32(len(in))) ] = true
+  }
+  out := make([]string, 0, count)
+  for i := range t {
+    out = append(out, in[i])
+  }
+  return out
+}
+
+var STEP_COUNT int = 2000
 
 func TestRun(t *testing.T) {
+  rand.Seed(time.Now().UnixNano())
 
-  requests := make(chan dag.Step, 100)
-  events := make(chan dag.Event, 100)
+  in_events := make(chan dag.Event, 100)
 
-  d := dag.NewMemoryDAG(requests, events)
+  d := dag.MemoryDAG{}
 
-  d.Start()
+  out_events := d.Start(in_events)
 
-  step_ids := []string{}
-  for i := 0; i < 100; i++ {
-    step_ids = append(step_ids, fmt.Sprintf("event_%d", i))
-    if i > 2 {
-      dcount := rand.Int31n(int32(i/2))
-      fmt.Printf("%d\n", dcount)
+  quit := make(chan bool)
+
+  //Create Job requests
+  go func() {
+    step_ids := []string{}
+    for i := 0; i < STEP_COUNT; i++ {
+      s := fmt.Sprintf("event_%d", i)
+      step_ids = append(step_ids, s)
+      depends := []string{}
+      if i > 2 {
+        dcount := int(rand.Int31n(int32(i/2))) % 7
+        depends = choose(step_ids, dcount)
+      }
+      in_events <- dag.Event{StepId:s,Event:dag.EventType_NEW,Depends:depends}
+      time.Sleep( time.Duration(rand.Int63n(100)) * time.Microsecond)
     }
-  }
-
-  requests <- dag.Step{StepId:"event1"}
-  requests <- dag.Step{StepId:"event2"}
+    close(in_events)
+  }()
+  
+  //Consume events
+//  jobs := sync.Map{}
+  job_quit := false
+  go func() {
+    //defer close(job)
+    for i := range out_events {
+      fmt.Printf("Out: %s\n", i)
+      if i.Event == dag.EventType_READY {
+        //jobs[i.StepId] = true
+      }
+    }
+    job_quit = true
+    quit <- true
+  }()
+  
+  go func() {
+    for job_quit {
+      
+    }
+  }()
 
   log.Printf("%#v", d)
-
-  close(requests)
-  close(events)
-
+  <- quit
 }
