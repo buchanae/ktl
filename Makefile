@@ -30,9 +30,9 @@ common-workflow-language:
 
 dag: blank
 	protoc \
-	-I dag -I googleapis -I task-execution-schemas  \
+	-I dag -I googleapis -I task-execution-schemas \
 	--go_out=dag\
 	Mgoogle/protobuf/struct.proto=github.com/golang/protobuf/ptypes/struct:./dag/ \
-	dag.proto
+	dag/dag.proto
 
-blank: 
+blank:

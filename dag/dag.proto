@@ -6,15 +6,20 @@ package dag;
 message Step {
   string dag_id = 1;
   string step_id = 2;
-  repeated string parent = 3;
+  repeated string depends = 3;
+}
+
+
+enum EventType {
+  UNKNOWN = 0;
+  WAITING = 1;
+  READY   = 2;
+  SUCCESS = 3;
+  FAILURE = 4;
 }
 
 
 message Event {
   string step_id = 1;
-  enum EventType {
-    SUCCESS = 1;
-    FAILURE = 2;
-  }
+  EventType event = 2;
 }
-
