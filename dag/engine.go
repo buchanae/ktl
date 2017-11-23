@@ -119,6 +119,7 @@ func (self *MemoryDAG) Start(input chan Event) chan Event {
 	self.rev = map[string][]string{}
 	self.deps = map[string][]string{}
 	self.out = make(chan Event, 10)
+	self.state_mutex = sync.Mutex{}
 
 	go func() {
 		defer close(self.out)

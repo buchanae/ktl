@@ -1,11 +1,11 @@
 package dag
 
 import (
-	"log"
-	//"sync"
 	"fmt"
 	"github.com/ohsu-comp-bio/ktl/dag"
+	"log"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 )
@@ -56,6 +56,8 @@ func TestRun(t *testing.T) {
 		close(in_events)
 	}()
 
+	processed := make(map[string]bool, STEP_COUNT)
+	processed_lock := sync.Mutex{}
 	//Consume events
 	go func() {
 		//defer close(job)
@@ -65,7 +67,9 @@ func TestRun(t *testing.T) {
 			case dag.EventType_READY:
 				go func(step_id string) {
 					time.Sleep(time.Duration(rand.Int63n(1000)) * time.Microsecond)
-					//log.Printf("Complete: %s", step_id)
+					processed_lock.Lock()
+					processed[step_id] = true
+					processed_lock.Unlock()
 					in_events <- dag.Event{StepId: step_id, Event: dag.EventType_SUCCESS}
 				}(i.StepId)
 			default:
@@ -74,7 +78,17 @@ func TestRun(t *testing.T) {
 		}
 		quit <- true
 	}()
-
 	log.Printf("%#v", d)
 	<-quit
+
+	//check to make sure correct number of jobs were processed
+	if len(processed) != STEP_COUNT {
+		for i := 0; i < STEP_COUNT; i++ {
+			s := fmt.Sprintf("event_%d", i)
+			if _, ok := processed[s]; !ok {
+				t.Errorf("Processed %s not found", s)
+			}
+		}
+		t.Errorf("Processed %d out of %d events", len(processed), STEP_COUNT)
+	}
 }
