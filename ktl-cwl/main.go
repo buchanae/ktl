@@ -6,7 +6,6 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/ohsu-comp-bio/ktl/cwl"
 	"github.com/ohsu-comp-bio/ktl/engine"
-	"github.com/ohsu-comp-bio/ktl/tes"
 	"io/ioutil"
 	"log"
 	"os"
@@ -102,7 +101,7 @@ func main() {
 	env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
 
 	if *print_flag {
-		tes_doc, err := tes.Render(cmd, mapper, env)
+		tes_doc, err := engine.Render(cmd, mapper, env)
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 			os.Exit(1)

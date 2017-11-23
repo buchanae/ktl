@@ -2,10 +2,10 @@ package engine
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/ohsu-comp-bio/funnel/cmd/client"
+	"context"
+	"github.com/ohsu-comp-bio/funnel/client"
 	"github.com/ohsu-comp-bio/ktl/cwl"
-	"github.com/ohsu-comp-bio/ktl/tes"
+	"github.com/ohsu-comp-bio/funnel/proto/tes"
 	"log"
 	"os"
 )
@@ -20,24 +20,20 @@ func NewEngine(host string) Engine {
 
 func (self Engine) Run(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment) (cwl.JSONDict, error) {
 
-	tes_doc, err := tes.Render(cmd, mapper, env)
+	tes_doc, err := Render(cmd, mapper, env)
 	if err != nil {
 		os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 		os.Exit(1)
 	}
 
-	log.Printf("Submitting %s", tes_doc)
-	m := jsonpb.Marshaler{}
-	tmes, _ := m.MarshalToString(&tes_doc)
-
-	resp, err := self.client.CreateTask([]byte(tmes))
+	resp, err := self.client.CreateTask(context.Background(), &tes_doc)
 	if err != nil {
 		log.Printf("Error: %s", err)
 		return cwl.JSONDict{}, err
 	}
 
-	self.client.WaitForTask(resp.Id)
-	task_result, _ := self.client.GetTask(resp.Id, "FULL")
+	self.client.WaitForTask(context.Background(), resp.Id)
+	task_result, _ := self.client.GetTask(context.Background(), &tes.GetTaskRequest{Id:resp.Id, View:tes.TaskView_FULL})
 
 	log.Printf("Response: %s", task_result)
 	return cwl.JSONDict{}, nil
