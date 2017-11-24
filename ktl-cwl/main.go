@@ -87,33 +87,35 @@ func main() {
 	}
 
 	if *proto_flag {
-		//log.Printf("%#v\n", cwl_doc)
 		marsh := jsonpb.Marshaler{Indent: "  "}
-		cmd := cwl_doc.CommandLineTool()
-		txt, _ := marsh.MarshalToString(&cmd)
-		fmt.Printf("%s", txt)
+		if cmd, err := cwl_doc.CommandLineTool(); err == nil {
+			txt, _ := marsh.MarshalToString(&cmd)
+			fmt.Printf("%s", txt)
+		}
+		if wrk, err := cwl_doc.Workflow(); err == nil {
+			txt, _ := marsh.MarshalToString(&wrk)
+			fmt.Printf("%s", txt)
+		}
 		os.Exit(0)
 	}
-	//log.Printf("%#v\n", inputs)
 
-	cmd := cwl_doc.CommandLineTool()
-
-	env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
-
-	if *print_flag {
-		tes_doc, err := engine.Render(cmd, mapper, env)
-		if err != nil {
-			os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
-			os.Exit(1)
+	if cmd, err := cwl_doc.CommandLineTool(); err == nil {
+		env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
+		if *print_flag {
+			tes_doc, err := engine.Render(cmd, mapper, env)
+			if err != nil {
+				os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
+				os.Exit(1)
+			}
+			m := jsonpb.Marshaler{}
+			m.Indent = " "
+			tmes, _ := m.MarshalToString(&tes_doc)
+			fmt.Printf("%s\n", tmes)
+		} else {
+			cwl_engine := engine.NewEngine(*tes_server)
+			outputs, _ := cwl_engine.Run(cmd, mapper, env)
+			fmt.Printf("%s\n", outputs)
 		}
-		m := jsonpb.Marshaler{}
-		m.Indent = " "
-		tmes, _ := m.MarshalToString(&tes_doc)
-		fmt.Printf("%s\n", tmes)
-	} else {
-		cwl_engine := engine.NewEngine(*tes_server)
-		outputs, _ := cwl_engine.Run(cmd, mapper, env)
-		fmt.Printf("%s\n", outputs)
 	}
 
 }

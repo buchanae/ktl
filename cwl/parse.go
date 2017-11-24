@@ -106,22 +106,42 @@ func Parse(cwl_path string) (CWLGraph, error) {
 	if base, ok := doc["$graph"]; ok {
 		log.Printf("%s\n", base)
 		//return parser.NewGraph(base)
-	} else if _, ok := doc["class"]; ok {
-		fixed_doc := FixCommandLineTool(doc)
-		jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
-		if err != nil {
-			log.Printf("%s", err)
-		}
-		log.Printf("Parsed: %s\n", jdoc)
-		cmd := CommandLineTool{}
+	} else if class, ok := doc["class"]; ok {
+		if class == "CommandLineTool" {
+			fixed_doc := FixCommandLineTool(doc)
+			jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
+			if err != nil {
+				log.Printf("%s", err)
+			}
+			log.Printf("Parsed: %s\n", jdoc)
+			cmd := CommandLineTool{}
 
-		umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
-		err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
-		if err != nil {
-			log.Printf("SchemaParseError: %s", err)
-			return CWLGraph{}, fmt.Errorf("Unable to parse file")
+			umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
+			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
+			if err != nil {
+				log.Printf("SchemaParseError: %s", err)
+				return CWLGraph{}, fmt.Errorf("Unable to parse file")
+			}
+			return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
+		} else if class == "Workflow" {
+			fixed_doc := FixWorkflow(doc)
+			jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
+			if err != nil {
+				log.Printf("%s", err)
+			}
+			log.Printf("Parsed: %s\n", jdoc)
+			cmd := Workflow{}
+
+			umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
+			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
+			if err != nil {
+				log.Printf("SchemaParseError: %s", err)
+				return CWLGraph{}, fmt.Errorf("Unable to parse file")
+			}
+			return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
+		} else {
+			return CWLGraph{}, fmt.Errorf("Unknown class %s", class)
 		}
-		return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
 		//return parser.NewClass(doc)
 	}
 	return CWLGraph{}, fmt.Errorf("Unable to parse file")
@@ -342,5 +362,90 @@ func FixCommandLineTool(doc JSONDict) JSONDict {
 	}
 	//undo stdout capture shortcuts
 
+	return doc
+}
+
+func FixWorkflowStepOutput(i interface{}) interface{} {
+	if x, ok := i.(string); ok {
+		return JSONDict{"id": x}
+	}
+	return i
+}
+
+func FixWorkflowStepOutputList(x []interface{}) []interface{} {
+	out := []interface{}{}
+	for _, i := range x {
+		out = append(out, FixWorkflowStepOutput(i))
+	}
+	return out
+}
+
+func FixWorkflowStepInput(x interface{}) JSONDict {
+	if i, ok := x.(string); ok {
+		return JSONDict{"source": []interface{}{i}}
+	}
+	if i, ok := x.(JSONDict); ok {
+		return i
+	}
+	return JSONDict{}
+}
+
+func FixWorkflowStepInputList(x []interface{}) []interface{} {
+	out := []interface{}{}
+	for _, i := range x {
+		out = append(out, FixWorkflowStepInput(i))
+	}
+	return out
+}
+
+func FixWorkflowStepInputMap(x map[string]interface{}) []interface{} {
+	out := []interface{}{}
+	for k, v := range x {
+		i := FixWorkflowStepInput(v)
+		i["id"] = k
+		out = append(out, i)
+	}
+	return out
+}
+
+func FixWorkflowStep(doc JSONDict) JSONDict {
+	if x, ok := doc["in"]; ok {
+		if x_list, ok := x.([]interface{}); ok {
+			doc["in"] = FixWorkflowStepInputList(x_list)
+		}
+		if x_map, ok := x.(JSONDict); ok {
+			doc["in"] = FixWorkflowStepInputMap(x_map)
+		}
+	}
+	if x, ok := doc["out"]; ok {
+		doc["out"] = FixWorkflowStepOutputList(x.([]interface{}))
+	}
+	if x, ok := doc["run"]; ok {
+		if x_str, ok := x.(string); ok {
+			doc["run"] = JSONDict{"path": x_str}
+		}
+	}
+	return doc
+}
+
+func FixWorkflowStepList(list []interface{}) interface{} {
+	out := []interface{}{}
+	for _, i := range list {
+		out = append(out, FixWorkflowStep(i.(JSONDict)))
+	}
+	return out
+}
+
+func FixWorkflow(doc JSONDict) JSONDict {
+	doc = fixDict2List(doc, "type", "inputs", "outputs", "hints", "requirements", "steps")
+	if x, ok := doc["inputs"]; ok {
+		doc["inputs"] = FixInputRecordFieldList(x.([]interface{}))
+	}
+	if x, ok := doc["outputs"]; ok {
+		doc["outputs"] = FixOutputRecordFieldList(x.([]interface{}))
+	}
+	if x, ok := doc["steps"]; ok {
+		doc["steps"] = FixWorkflowStepList(x.([]interface{}))
+	}
 	return doc
 }

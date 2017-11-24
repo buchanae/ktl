@@ -3,7 +3,8 @@ package cwl
 type JSONDict map[string]interface{}
 
 type CWLDoc interface {
-	CommandLineTool() CommandLineTool
+	CommandLineTool() (CommandLineTool, error)
+	Workflow() (Workflow, error)
 }
 
 type CWLParser struct {
