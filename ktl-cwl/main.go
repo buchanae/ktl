@@ -113,9 +113,14 @@ func main() {
 			fmt.Printf("%s\n", tmes)
 		} else {
 			cwl_engine := engine.NewEngine(*tes_server)
-			outputs, _ := cwl_engine.Run(cmd, mapper, env)
+			outputs, _ := cwl_engine.RunCommandLine(cmd, mapper, env)
 			fmt.Printf("%s\n", outputs)
 		}
+	} else if wf, err := cwl_doc.Workflow(); err == nil {
+		env := cwl.Environment{Inputs: inputs}
+		cwl_engine := engine.NewEngine(*tes_server)
+		outputs, _ := cwl_engine.RunWorkflow(wf, mapper, env)
+		fmt.Printf("%s\n", outputs)
 	}
 
 }

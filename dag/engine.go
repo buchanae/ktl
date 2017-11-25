@@ -33,7 +33,7 @@ func (self *MemoryDAG) ActiveCount() int {
 }
 
 func (self *MemoryDAG) process_NEW(i Event) {
-	//log.Printf("%#v", i)
+	log.Printf("Process New: %#v", i)
 	self.steps[i.StepId] = Step{StepId: i.StepId, Depends: i.Depends}
 	depends := []string{}
 	in_error := false
