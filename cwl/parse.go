@@ -120,7 +120,7 @@ func Parse(cwl_path string) (CWLGraph, error) {
 			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
 			if err != nil {
 				log.Printf("SchemaParseError: %s", err)
-				return CWLGraph{}, fmt.Errorf("Unable to parse file")
+				return CWLGraph{}, fmt.Errorf("Unable to parse file %s", cwl_path)
 			}
 			return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
 		} else if class == "Workflow" {
@@ -130,15 +130,24 @@ func Parse(cwl_path string) (CWLGraph, error) {
 				log.Printf("%s", err)
 			}
 			log.Printf("Parsed: %s\n", jdoc)
-			cmd := Workflow{}
-
+			wf := Workflow{}
 			umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
-			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
+			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &wf)
 			if err != nil {
 				log.Printf("SchemaParseError: %s", err)
-				return CWLGraph{}, fmt.Errorf("Unable to parse file")
+				return CWLGraph{}, fmt.Errorf("Unable to parse file %s", cwl_path)
 			}
-			return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
+			out := CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": wf}}
+			for _, s := range wf.Steps {
+				if s.Run.GetPath() != "" {
+					g, err := Parse(s.Run.GetPath())
+					if err != nil {
+						return CWLGraph{}, err
+					}
+					out.Elements[s.Run.GetPath()] = g.Elements["#"]
+				}
+			}
+			return out, nil
 		} else {
 			return CWLGraph{}, fmt.Errorf("Unknown class %s", class)
 		}

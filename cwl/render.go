@@ -2,6 +2,7 @@ package cwl
 
 import (
 	"fmt"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 	"log"
 	"sort"
 )
@@ -82,9 +83,9 @@ func (self CommandLineTool) SetDefaults(env Environment) Environment {
 	for _, x := range self.Inputs {
 		if _, ok := env.Inputs[x.Id]; !ok {
 			if x.Default != nil {
-				if y, ok := x.Default.GetData().(*DataRecord_StringValue); ok {
+				if y, ok := x.Default.GetKind().(*structpb.Value_StringValue); ok {
 					out.Inputs[x.Id] = y.StringValue
-				} else if y, ok := x.Default.GetData().(*DataRecord_StructValue); ok {
+				} else if y, ok := x.Default.GetKind().(*structpb.Value_StructValue); ok {
 					out.Inputs[x.Id] = AsMap(y.StructValue)
 				}
 			}
