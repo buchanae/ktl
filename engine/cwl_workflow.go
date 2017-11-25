@@ -2,7 +2,7 @@ package engine
 
 import (
   "log"
-  "time"
+  //"time"
 	"github.com/ohsu-comp-bio/ktl/cwl"
   "github.com/ohsu-comp-bio/ktl/dag"
 	"strings"
@@ -16,10 +16,16 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.E
 
   in_events := make(chan dag.Event, 100)
   out_events := md.Start(in_events)
+  quit := make(chan bool)
   go func() {
     for e := range out_events {
       log.Printf("Out: %s", e)
+      in_events <- dag.Event{
+        StepId: e.StepId,
+        Event: dag.EventType_SUCCESS,
+      }
     }
+    quit <- true
   }()
 
 	steps := map[string]bool{}
@@ -60,13 +66,8 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.E
 			}
 		}
 	}
-
-  log.Printf("ActiveCount: %d", md.ActiveCount())
-  for md.ActiveCount() > 0 {
-		time.Sleep(500 * time.Microsecond)
-		log.Printf("ActiveCount: %d", md.ActiveCount())
-	}
-	close(in_events)
-
+  de := dag.Event{Event: dag.EventType_CLOSE}
+  in_events <- de
+  <- quit
 	return cwl.JSONDict{}, nil
 }

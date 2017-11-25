@@ -17,6 +17,7 @@ enum EventType {
   SUCCESS  = 4;
   FAILURE  = 5;
   CANCELED = 6;
+  CLOSE    = 7;
 }
 
 

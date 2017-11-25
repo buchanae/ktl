@@ -122,6 +122,7 @@ func (self *MemoryDAG) Start(input chan Event) chan Event {
 	self.state_mutex = sync.Mutex{}
 
 	go func() {
+		quit := false
 		defer close(self.out)
 		for i := range input {
 			switch i.Event {
@@ -129,8 +130,16 @@ func (self *MemoryDAG) Start(input chan Event) chan Event {
 				self.process_NEW(i)
 			case EventType_SUCCESS:
 				self.process_SUCCESS(i)
+			case EventType_CLOSE:
+				log.Printf("Starting Close")
+				quit = true
 			default:
 				log.Printf("Unknown Event")
+			}
+			if quit {
+				if self.ActiveCount() == 0 {
+					close(input)
+				}
 			}
 		}
 	}()
