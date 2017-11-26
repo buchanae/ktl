@@ -1,6 +1,5 @@
 package cwl
 
-type JSONDict map[string]interface{}
 
 type CWLDoc interface {
 	CommandLineTool() (CommandLineTool, error)

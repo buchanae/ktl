@@ -3,14 +3,15 @@ package cwl
 import (
 	"fmt"
 	structpb "github.com/golang/protobuf/ptypes/struct"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"log"
 	"sort"
 )
 
 type Environment struct {
-	Inputs  JSONDict
-	Outputs JSONDict
-	Runtime JSONDict
+	Inputs  pbutil.JSONDict
+	Outputs pbutil.JSONDict
+	Runtime pbutil.JSONDict
 }
 
 type OutputMapping struct {
@@ -35,14 +36,14 @@ func getDockerImage(m map[string]interface{}) string {
 func (self CommandLineTool) GetImageName() string {
 	out := ""
 	for _, i := range self.Hints {
-		m := AsMap(i)
+		m := pbutil.AsMap(i)
 		s := getDockerImage(m)
 		if s != "" {
 			return s
 		}
 	}
 	for _, i := range self.Requirements {
-		m := AsMap(i)
+		m := pbutil.AsMap(i)
 		s := getDockerImage(m)
 		if s != "" {
 			return s
@@ -58,7 +59,7 @@ func (self CommandLineTool) GetMappedInputs(mapper FileMapper, env Environment) 
 		if i.Type.GetName() == "File" {
 			if input, ok := env.Inputs[i.Id]; ok {
 				fmt.Printf("Input: %s %s\n", i.Id, input)
-				input_dict := input.(JSONDict)
+				input_dict := input.(pbutil.JSONDict)
 				if p, ok := input_dict["path"]; ok {
 					o := MappedInput{
 						StoragePath: p.(string),
@@ -86,7 +87,7 @@ func (self CommandLineTool) SetDefaults(env Environment) Environment {
 				if y, ok := x.Default.GetKind().(*structpb.Value_StringValue); ok {
 					out.Inputs[x.Id] = y.StringValue
 				} else if y, ok := x.Default.GetKind().(*structpb.Value_StructValue); ok {
-					out.Inputs[x.Id] = AsMap(y.StructValue)
+					out.Inputs[x.Id] = pbutil.AsMap(y.StructValue)
 				}
 			}
 		}
@@ -220,7 +221,7 @@ func (self CommandInputParameter) Evaluate(mapper FileMapper, env Environment) (
 func (self TypeRecord) Evaluate(v interface{}, mapper FileMapper) StringTree {
 	switch r := self.GetType().(type) {
 	case *TypeRecord_Name:
-		if x, ok := v.(JSONDict); ok {
+		if x, ok := v.(pbutil.JSONDict); ok {
 			if y, ok := x["class"]; ok {
 				if y == "File" {
 					if z, ok := x["path"]; ok {

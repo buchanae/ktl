@@ -5,11 +5,12 @@ import (
   //"time"
 	"github.com/ohsu-comp-bio/ktl/cwl"
   "github.com/ohsu-comp-bio/ktl/dag"
+  "github.com/ohsu-comp-bio/ktl/pbutil"
 	"strings"
 )
 
 
-func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.Environment) (cwl.JSONDict, error) {
+func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.Environment) (pbutil.JSONDict, error) {
 	log.Printf("Starting Workflow")
 
   md := dag.MemoryDAG{}
@@ -19,6 +20,7 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.E
   quit := make(chan bool)
   go func() {
     for e := range out_events {
+
       log.Printf("Out: %s", e)
       in_events <- dag.Event{
         StepId: e.StepId,
@@ -69,5 +71,5 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, mapper cwl.FileMapper, env cwl.E
   de := dag.Event{Event: dag.EventType_CLOSE}
   in_events <- de
   <- quit
-	return cwl.JSONDict{}, nil
+	return pbutil.JSONDict{}, nil
 }

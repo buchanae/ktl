@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -13,7 +14,7 @@ import (
 
 func mapNormalize(v interface{}) interface{} {
 	if base, ok := v.(map[interface{}]interface{}); ok {
-		out := JSONDict{}
+		out := pbutil.JSONDict{}
 		for k, v := range base {
 			out[k.(string)] = mapNormalize(v)
 		}
@@ -34,7 +35,7 @@ func mapNormalize(v interface{}) interface{} {
 	return v
 }
 
-func YamlLoad(path string) (JSONDict, error) {
+func YamlLoad(path string) (pbutil.JSONDict, error) {
 	source, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -42,22 +43,22 @@ func YamlLoad(path string) (JSONDict, error) {
 	doc := make(map[interface{}]interface{})
 	err = yaml.Unmarshal(source, &doc)
 	out := mapNormalize(doc)
-	return out.(JSONDict), nil
+	return out.(pbutil.JSONDict), nil
 }
 
-func InputParse(path string, mapper FileMapper) (JSONDict, error) {
+func InputParse(path string, mapper FileMapper) (pbutil.JSONDict, error) {
 	doc, err := YamlLoad(path)
 
 	x, _ := filepath.Abs(path)
 	base_path := filepath.Dir(x)
 
-	out := AdjustInputs(doc, base_path, mapper).(JSONDict)
+	out := AdjustInputs(doc, base_path, mapper).(pbutil.JSONDict)
 	return out, err
 }
 
 func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interface{} {
-	if base, ok := input.(JSONDict); ok {
-		out := JSONDict{}
+	if base, ok := input.(pbutil.JSONDict); ok {
+		out := pbutil.JSONDict{}
 		if class, ok := base["class"]; ok {
 			if class == "File" {
 				for k, v := range base {
@@ -160,7 +161,7 @@ func isDict(i interface{}) bool {
 	if _, ok := i.(map[string]interface{}); ok {
 		return true
 	}
-	if _, ok := i.(JSONDict); ok {
+	if _, ok := i.(pbutil.JSONDict); ok {
 		return true
 	}
 	return false
@@ -195,18 +196,18 @@ func contains(a []string, v string) bool {
 	return false
 }
 
-func fixDict2List(doc JSONDict, typeField string, fields ...string) JSONDict {
-	out := JSONDict{}
+func fixDict2List(doc pbutil.JSONDict, typeField string, fields ...string) pbutil.JSONDict {
+	out := pbutil.JSONDict{}
 	for k, v := range doc {
 		if contains(fields, k) {
 			if isDict(v) {
 				nv := []interface{}{}
-				for ek, ev := range v.(JSONDict) {
+				for ek, ev := range v.(pbutil.JSONDict) {
 					if isString(ev) || isList(ev) {
-						i := JSONDict{"id": ek, typeField: ev}
+						i := pbutil.JSONDict{"id": ek, typeField: ev}
 						nv = append(nv, i)
 					} else {
-						i := ev.(JSONDict)
+						i := ev.(pbutil.JSONDict)
 						i["id"] = ek
 						nv = append(nv, i)
 					}
@@ -223,8 +224,8 @@ func fixDict2List(doc JSONDict, typeField string, fields ...string) JSONDict {
 	return out
 }
 
-func fixForceList(doc JSONDict, fields ...string) JSONDict {
-	out := JSONDict{}
+func fixForceList(doc pbutil.JSONDict, fields ...string) pbutil.JSONDict {
+	out := pbutil.JSONDict{}
 	for k, v := range doc {
 		if contains(fields, k) {
 			if !isList(v) {
@@ -239,39 +240,39 @@ func fixForceList(doc JSONDict, fields ...string) JSONDict {
 	return out
 }
 
-func FixDataRecord(doc interface{}) JSONDict {
+func FixDataRecord(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
-		return JSONDict{"string_value": doc.(string)}
+		return pbutil.JSONDict{"string_value": doc.(string)}
 	}
 	if isDict(doc) {
-		return JSONDict{"struct_value": doc.(JSONDict)}
+		return pbutil.JSONDict{"struct_value": doc.(pbutil.JSONDict)}
 	}
 	if isList(doc) {
-		return JSONDict{"list_value": doc.([]interface{})}
+		return pbutil.JSONDict{"list_value": doc.([]interface{})}
 	}
 	if isFloat(doc) {
-		return JSONDict{"float_value": doc.(float32)}
+		return pbutil.JSONDict{"float_value": doc.(float32)}
 	}
 	if isInt(doc) {
-		return JSONDict{"int_value": doc}
+		return pbutil.JSONDict{"int_value": doc}
 	}
 	log.Printf("Unknown Type: %#T", doc)
-	return JSONDict{}
+	return pbutil.JSONDict{}
 }
 
-func FixTypeRecord(doc interface{}) JSONDict {
+func FixTypeRecord(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
 		doc_string := doc.(string)
 		if strings.HasSuffix(doc_string, "[]") {
-			return JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_string[:len(doc_string)-2])}}
+			return pbutil.JSONDict{"array": pbutil.JSONDict{"items": FixTypeRecord(doc_string[:len(doc_string)-2])}}
 		} else {
-			return JSONDict{"name": doc}
+			return pbutil.JSONDict{"name": doc}
 		}
 	}
 	if isDict(doc) {
-		doc_dict := doc.(JSONDict)
+		doc_dict := doc.(pbutil.JSONDict)
 		if doc_dict["type"] == "array" {
-			o := JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
+			o := pbutil.JSONDict{"array": pbutil.JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
 			if x, ok := doc_dict["inputBinding"]; ok {
 				o["inputBinding"] = x
 			}
@@ -281,12 +282,12 @@ func FixTypeRecord(doc interface{}) JSONDict {
 			doc_fields_list := doc_dict["fields"].([]interface{})
 			fields := []interface{}{}
 			for _, i := range doc_fields_list {
-				field_doc := i.(JSONDict)
-				fields = append(fields, JSONDict{"name": field_doc["name"], "type": FixTypeRecord(field_doc["type"])})
+				field_doc := i.(pbutil.JSONDict)
+				fields = append(fields, pbutil.JSONDict{"name": field_doc["name"], "type": FixTypeRecord(field_doc["type"])})
 			}
-			return JSONDict{"record": JSONDict{"name": doc_dict["name"], "fields": fields}}
+			return pbutil.JSONDict{"record": pbutil.JSONDict{"name": doc_dict["name"], "fields": fields}}
 			if doc_dict["type"] == "enum" {
-				return JSONDict{"enum": JSONDict{"name": doc_dict["name"], "symbols": doc_dict["symbols"]}}
+				return pbutil.JSONDict{"enum": pbutil.JSONDict{"name": doc_dict["name"], "symbols": doc_dict["symbols"]}}
 			}
 		}
 	}
@@ -296,12 +297,12 @@ func FixTypeRecord(doc interface{}) JSONDict {
 		for _, i := range doc_list {
 			t = append(t, FixTypeRecord(i))
 		}
-		return JSONDict{"oneof": JSONDict{"types": t}}
+		return pbutil.JSONDict{"oneof": pbutil.JSONDict{"types": t}}
 	}
-	return JSONDict{}
+	return pbutil.JSONDict{}
 }
 
-func FixInputRecordField(doc JSONDict) JSONDict {
+func FixInputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "doc")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["default"]; ok {
@@ -313,22 +314,22 @@ func FixInputRecordField(doc JSONDict) JSONDict {
 func FixInputRecordFieldList(list []interface{}) interface{} {
 	out := make([]interface{}, len(list))
 	for i := range list {
-		i_doc := list[i].(JSONDict)
+		i_doc := list[i].(pbutil.JSONDict)
 		out[i] = FixInputRecordField(i_doc)
 	}
 	return out
 }
 
-func FixCommandOutputBinding(doc JSONDict) JSONDict {
+func FixCommandOutputBinding(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "glob")
 	return doc
 }
 
-func FixOutputRecordField(doc JSONDict) JSONDict {
+func FixOutputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "doc", "outputSource")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["outputBinding"]; ok {
-		doc["outputBinding"] = FixCommandOutputBinding(x.(JSONDict))
+		doc["outputBinding"] = FixCommandOutputBinding(x.(pbutil.JSONDict))
 	}
 	return doc
 }
@@ -336,17 +337,17 @@ func FixOutputRecordField(doc JSONDict) JSONDict {
 func FixOutputRecordFieldList(list []interface{}) interface{} {
 	out := make([]interface{}, len(list))
 	for i := range list {
-		i_doc := list[i].(JSONDict)
+		i_doc := list[i].(pbutil.JSONDict)
 		out[i] = FixOutputRecordField(i_doc)
 	}
 	return out
 }
 
-func FixCommandLineBinding(doc interface{}) JSONDict {
+func FixCommandLineBinding(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
-		return JSONDict{"valueFrom": doc}
+		return pbutil.JSONDict{"valueFrom": doc}
 	}
-	return doc.(JSONDict)
+	return doc.(pbutil.JSONDict)
 }
 
 func FixCommandLineBindingList(list []interface{}) interface{} {
@@ -357,7 +358,7 @@ func FixCommandLineBindingList(list []interface{}) interface{} {
 	return out
 }
 
-func FixCommandLineTool(doc JSONDict) JSONDict {
+func FixCommandLineTool(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixDict2List(doc, "type", "inputs", "outputs", "hints", "requirements")
 	doc = fixForceList(doc, "baseCommand", "doc")
 	if x, ok := doc["inputs"]; ok {
@@ -376,7 +377,7 @@ func FixCommandLineTool(doc JSONDict) JSONDict {
 
 func FixWorkflowStepOutput(i interface{}) interface{} {
 	if x, ok := i.(string); ok {
-		return JSONDict{"id": x}
+		return pbutil.JSONDict{"id": x}
 	}
 	return i
 }
@@ -389,14 +390,14 @@ func FixWorkflowStepOutputList(x []interface{}) []interface{} {
 	return out
 }
 
-func FixWorkflowStepInput(x interface{}) JSONDict {
+func FixWorkflowStepInput(x interface{}) pbutil.JSONDict {
 	if i, ok := x.(string); ok {
-		return JSONDict{"source": []interface{}{i}}
+		return pbutil.JSONDict{"source": []interface{}{i}}
 	}
-	if i, ok := x.(JSONDict); ok {
+	if i, ok := x.(pbutil.JSONDict); ok {
 		return i
 	}
-	return JSONDict{}
+	return pbutil.JSONDict{}
 }
 
 func FixWorkflowStepInputList(x []interface{}) []interface{} {
@@ -417,12 +418,12 @@ func FixWorkflowStepInputMap(x map[string]interface{}) []interface{} {
 	return out
 }
 
-func FixWorkflowStep(doc JSONDict) JSONDict {
+func FixWorkflowStep(doc pbutil.JSONDict) pbutil.JSONDict {
 	if x, ok := doc["in"]; ok {
 		if x_list, ok := x.([]interface{}); ok {
 			doc["in"] = FixWorkflowStepInputList(x_list)
 		}
-		if x_map, ok := x.(JSONDict); ok {
+		if x_map, ok := x.(pbutil.JSONDict); ok {
 			doc["in"] = FixWorkflowStepInputMap(x_map)
 		}
 	}
@@ -431,7 +432,7 @@ func FixWorkflowStep(doc JSONDict) JSONDict {
 	}
 	if x, ok := doc["run"]; ok {
 		if x_str, ok := x.(string); ok {
-			doc["run"] = JSONDict{"path": x_str}
+			doc["run"] = pbutil.JSONDict{"path": x_str}
 		}
 	}
 	return doc
@@ -440,12 +441,12 @@ func FixWorkflowStep(doc JSONDict) JSONDict {
 func FixWorkflowStepList(list []interface{}) interface{} {
 	out := []interface{}{}
 	for _, i := range list {
-		out = append(out, FixWorkflowStep(i.(JSONDict)))
+		out = append(out, FixWorkflowStep(i.(pbutil.JSONDict)))
 	}
 	return out
 }
 
-func FixWorkflow(doc JSONDict) JSONDict {
+func FixWorkflow(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixDict2List(doc, "type", "inputs", "outputs", "hints", "requirements", "steps")
 	if x, ok := doc["inputs"]; ok {
 		doc["inputs"] = FixInputRecordFieldList(x.([]interface{}))

@@ -6,6 +6,7 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/ohsu-comp-bio/ktl/cwl"
 	"github.com/ohsu-comp-bio/ktl/engine"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"io/ioutil"
 	"log"
 	"os"
@@ -54,10 +55,10 @@ func main() {
 		os.Exit(1)
 	}
 	//log.Printf("CWLDoc: %#v", cwl_docs)
-	var inputs cwl.JSONDict
+	var inputs pbutil.JSONDict
 	mapper := cwl.URLDockerMapper{*outdir}
 	if len(flag.Args()) == 1 {
-		inputs = cwl.JSONDict{}
+		inputs = pbutil.JSONDict{}
 	} else {
 		var err error
 		inputs, err = cwl.InputParse(flag.Arg(1), mapper)
