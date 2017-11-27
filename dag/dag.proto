@@ -7,6 +7,8 @@ import "google/protobuf/struct.proto";
 message Step {
   string step_id = 1;
   repeated string depends = 2;
+  repeated InputMapping inputs = 3;
+  google.protobuf.Struct results = 4;
 }
 
 enum EventType {

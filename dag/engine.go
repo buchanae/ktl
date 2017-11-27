@@ -3,6 +3,7 @@ package dag
 import (
 	"log"
 	"sync"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 type DAGEngine interface {
@@ -34,7 +35,7 @@ func (self *MemoryDAG) ActiveCount() int {
 
 func (self *MemoryDAG) process_NEW(i Event) {
 	log.Printf("Process New: %#v", i)
-	self.steps[i.StepId] = Step{StepId: i.StepId, Depends: i.Depends}
+	self.steps[i.StepId] = Step{StepId: i.StepId, Depends: i.Depends, Inputs:i.Inputs}
 	depends := []string{}
 	in_error := false
 	for _, d := range i.Depends {
@@ -90,27 +91,43 @@ func remove(in []string, s string) []string {
 	return out
 }
 
+func (self *MemoryDAG) start_Step(stepId string) {
+	self.states[stepId] = EventType_RUNNING
+	log.Printf("Starting: %s", stepId)
+	params := structpb.Struct{Fields: map[string]*structpb.Value{}}
+	for _, i := range self.steps[stepId].Inputs {
+		res := self.steps[i.SrcStepId].Results
+		if res != nil {
+			params.Fields[i.ParamName] = res.Fields[i.SrcParamName]
+		}
+	}
+	log.Printf("Step %s Params: %s", stepId, params)
+	self.out <- Event{StepId: stepId, Event: EventType_READY, Params:&params}
+}
+
 func (self *MemoryDAG) process_SUCCESS(i Event) {
 	log.Printf("success: %s", i.StepId)
-	//log.Printf("rev: %s %s", i.StepId, self.rev)
+	self.state_mutex.Lock()
+	self.states[i.StepId] = EventType_SUCCESS
+	s := self.steps[i.StepId]
+	s.Results = i.Params
+	self.steps[i.StepId] = s
+	log.Printf("Step %s Results: %s", i.StepId, s.Results)
+	self.state_mutex.Unlock()
+	//check for steps that were dependent on this one, that can now be started
 	if x, ok := self.rev[i.StepId]; ok {
 		log.Printf("Success: %s resolves dependency for %s", i.StepId, x)
 		for _, d := range x {
 			nd := remove(self.deps[d], i.StepId)
 			if len(nd) == 0 {
 				delete(self.deps, d)
-				self.states[d] = EventType_RUNNING
-				log.Printf("Starting: %s", d)
-				self.out <- Event{StepId: d, Event: EventType_READY}
+				self.start_Step(d)
 			} else {
 				self.deps[d] = nd
 			}
 		}
 		delete(self.rev, i.StepId)
 	}
-	self.state_mutex.Lock()
-	self.states[i.StepId] = EventType_SUCCESS
-	self.state_mutex.Unlock()
 }
 
 func (self *MemoryDAG) Start(input chan Event) chan Event {
