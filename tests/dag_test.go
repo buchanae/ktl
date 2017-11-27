@@ -3,6 +3,7 @@ package dag
 import (
 	"fmt"
 	"github.com/ohsu-comp-bio/ktl/dag"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"log"
 	"math/rand"
 	"sync"
@@ -49,11 +50,7 @@ func TestRun(t *testing.T) {
 			in_events <- dag.Event{StepId: s, Event: dag.EventType_NEW, Depends: depends}
 			time.Sleep(time.Duration(rand.Int63n(100)) * time.Microsecond)
 		}
-		for d.ActiveCount() > 0 {
-			time.Sleep(500 * time.Microsecond)
-			log.Printf("ActiveCount: %d", d.ActiveCount())
-		}
-		close(in_events)
+		in_events <- dag.Event{Event: dag.EventType_CLOSE}
 	}()
 
 	processed := make(map[string]bool, STEP_COUNT)
@@ -91,4 +88,64 @@ func TestRun(t *testing.T) {
 		}
 		t.Errorf("Processed %d out of %d events", len(processed), STEP_COUNT)
 	}
+}
+
+
+func TestInputMapping(t *testing.T) {
+	in_events := make(chan dag.Event, 100)
+	d := dag.MemoryDAG{}
+	out_events := d.Start(in_events)
+
+	in_events <- dag.Event{StepId: "step1", Event: dag.EventType_NEW}
+	in_events <- dag.Event{StepId: "step2",
+		Event: dag.EventType_NEW,
+		Depends:[]string{"step1"},
+		Inputs:[]*dag.InputMapping{
+			&dag.InputMapping{SrcStepId:"step1",SrcParamName:"output1",ParamName:"step1_output"},
+		},
+	}
+	in_events <- dag.Event{StepId: "step3",
+		Event: dag.EventType_NEW,
+		Depends:[]string{"step1", "step2"},
+		Inputs:[]*dag.InputMapping{
+			&dag.InputMapping{SrcStepId:"step1",SrcParamName:"output1",ParamName:"input1"},
+			&dag.InputMapping{SrcStepId:"step2",SrcParamName:"output2",ParamName:"input2"},
+		},
+	}
+	in_events <- dag.Event{Event: dag.EventType_CLOSE}
+
+	for e := range out_events {
+		if e.Event == dag.EventType_READY {
+			if e.StepId == "step1" {
+				in_events <- dag.Event{
+					StepId: "step1",
+					Event: dag.EventType_SUCCESS,
+					Params: pbutil.JSONDict{"output1" : "hello world"}.AsStruct(),
+				}
+			} else if e.StepId == "step2" {
+				if e.Params.Fields["step1_output"].GetStringValue() != "hello world" {
+					t.Errorf("Incorrect Input Parameter")
+				}
+				log.Printf("Params: %s", e.Params)
+				in_events <- dag.Event{
+					StepId: "step2",
+					Event: dag.EventType_SUCCESS,
+					Params: pbutil.JSONDict{"output2" : "world hello"}.AsStruct(),
+				}
+			} else if e.StepId == "step3" {
+				if e.Params.Fields["input1"].GetStringValue() != "hello world" {
+					t.Errorf("Incorrect Input Parameter")
+				}
+				if e.Params.Fields["input2"].GetStringValue() != "world hello" {
+					t.Errorf("Incorrect Input Parameter")
+				}
+				log.Printf("Params: %s", e.Params)
+				in_events <- dag.Event{
+					StepId: "step3",
+					Event: dag.EventType_SUCCESS,
+				}
+			}
+		}
+	}
+
 }
