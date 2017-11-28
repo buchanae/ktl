@@ -9,9 +9,10 @@ import (
 )
 
 type Environment struct {
-	Inputs  pbutil.JSONDict
-	Outputs pbutil.JSONDict
-	Runtime pbutil.JSONDict
+	DefaultImage string
+	Inputs       pbutil.JSONDict
+	Outputs      pbutil.JSONDict
+	Runtime      pbutil.JSONDict
 }
 
 type OutputMapping struct {
@@ -154,6 +155,15 @@ func (self CommandLineTool) Render(mapper FileMapper, env Environment) ([]string
 	}
 	//log.Printf("Out: %v", args)
 	return out, nil
+}
+
+func (self CommandLineTool) RenderStdinPath(mapper FileMapper, env Environment) (string, error) {
+	if self.Stdin == "" {
+		return self.Stdin, nil
+	}
+	eval := JSEvaluator{Inputs: env.Inputs, Outputs: env.Outputs, Runtime: env.Runtime}
+	s, err := eval.EvaluateExpressionString(self.Stdin, nil)
+	return mapper.Storage2Volume(s), err
 }
 
 type JobArgument struct {

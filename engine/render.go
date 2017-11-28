@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/ohsu-comp-bio/ktl/cwl"
 	"github.com/ohsu-comp-bio/funnel/proto/tes"
+	"github.com/ohsu-comp-bio/ktl/cwl"
 	"path/filepath"
 )
 
@@ -16,7 +16,17 @@ func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment)
 	exec := tes.Executor{}
 	exec.Command = cmd_line
 	exec.Image = cmd.GetImageName()
+	if exec.Image == "" {
+		exec.Image = env.DefaultImage
+	}
 	exec.Workdir = cwl.DOCKER_WORK_DIR
+	if cmd.Stdin != "" {
+		s, err := cmd.RenderStdinPath(mapper, env)
+		if err != nil {
+			return out, err
+		}
+		exec.Stdin = s
+	}
 	if cmd.Stdout != "" {
 		exec.Stdout = filepath.Join(cwl.DOCKER_WORK_DIR, cmd.Stdout)
 	} else {

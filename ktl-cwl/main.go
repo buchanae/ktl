@@ -101,7 +101,7 @@ func main() {
 	}
 
 	if cmd, err := cwl_doc.CommandLineTool(); err == nil {
-		env := cmd.SetDefaults(cwl.Environment{Inputs: inputs})
+		env := cmd.SetDefaults(cwl.Environment{Inputs: inputs, DefaultImage: "ubuntu:16.04"})
 		if *print_flag {
 			tes_doc, err := engine.Render(cmd, mapper, env)
 			if err != nil {
