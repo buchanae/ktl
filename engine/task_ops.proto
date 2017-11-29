@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package engine;
+
+message OutputGlob {
+  string param_name = 1;
+  string glob = 2;
+}
+
+message PostProcessStep {
+  oneof step {
+    OutputGlob glob_output = 1;
+  }
+}
+
+message PostProcess {
+  repeated PostProcessStep steps = 1;
+}
