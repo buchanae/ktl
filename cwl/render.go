@@ -55,11 +55,11 @@ func (self CommandLineTool) GetImageName() string {
 
 func (self CommandLineTool) GetMappedInputs(mapper FileMapper, env Environment) []MappedInput {
 	out := []MappedInput{}
-	fmt.Printf("InputMap: %s\n", env.Inputs)
+	log.Printf("InputMap: %s", env.Inputs)
 	for _, i := range self.Inputs {
 		if i.Type.GetName() == "File" {
 			if input, ok := env.Inputs[i.Id]; ok {
-				fmt.Printf("Input: %s %s\n", i.Id, input)
+				log.Printf("Input: %s %s", i.Id, input)
 				input_dict := input.(pbutil.JSONDict)
 				if p, ok := input_dict["path"]; ok {
 					o := MappedInput{
