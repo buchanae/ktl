@@ -1,6 +1,5 @@
 package cwl
 
-
 type CWLDoc interface {
 	CommandLineTool() (CommandLineTool, error)
 	Workflow() (Workflow, error)

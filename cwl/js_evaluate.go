@@ -2,8 +2,8 @@ package cwl
 
 import (
 	"fmt"
-	"github.com/robertkrimen/otto"
 	"github.com/ohsu-comp-bio/ktl/pbutil"
+	"github.com/robertkrimen/otto"
 	"log"
 	"regexp"
 )
