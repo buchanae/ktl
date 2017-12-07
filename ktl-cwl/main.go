@@ -12,6 +12,7 @@ import (
 	"os"
 	//"path/filepath"
 	"strings"
+	"encoding/json"
 	//"time"
 )
 
@@ -103,7 +104,7 @@ func main() {
 	if cmd, err := cwl_doc.CommandLineTool(); err == nil {
 		env := cmd.SetDefaults(cwl.Environment{Inputs: inputs, DefaultImage: "ubuntu:16.04"})
 		if *print_flag {
-			tes_doc, err := engine.Render(cmd, mapper, env)
+			tes_doc, post, err := engine.Render(cmd, mapper, env)
 			if err != nil {
 				os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 				os.Exit(1)
@@ -112,10 +113,14 @@ func main() {
 			m.Indent = " "
 			tmes, _ := m.MarshalToString(&tes_doc)
 			fmt.Printf("%s\n", tmes)
+			for _, i := range post.Steps {
+				fmt.Printf("POST: %s\n", i)
+			}
 		} else {
 			cwl_engine := engine.NewEngine(*tes_server)
 			outputs, _ := cwl_engine.RunCommandLine(cmd, mapper, env)
-			fmt.Printf("%s\n", outputs)
+			j, _ := json.MarshalIndent(outputs, "", "  ")
+			fmt.Printf("%s\n", j)
 		}
 	} else if wf, err := cwl_doc.Workflow(); err == nil {
 		env := cwl.Environment{Inputs: inputs}

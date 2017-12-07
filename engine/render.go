@@ -1,15 +1,16 @@
 package engine
 
 import (
+	//"log"
 	"github.com/ohsu-comp-bio/funnel/proto/tes"
 	"github.com/ohsu-comp-bio/ktl/cwl"
 	"path/filepath"
 )
 
-func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment) (tes.Task, error) {
+func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment) (tes.Task, PostProcess, error) {
 	cmd_line, err := cmd.Render(mapper, env)
 	if err != nil {
-		return tes.Task{}, err
+		return tes.Task{}, PostProcess{}, err
 	}
 
 	out := tes.Task{}
@@ -23,7 +24,7 @@ func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment)
 	if cmd.Stdin != "" {
 		s, err := cmd.RenderStdinPath(mapper, env)
 		if err != nil {
-			return out, err
+			return out, PostProcess{}, err
 		}
 		exec.Stdin = s
 	}
@@ -55,5 +56,11 @@ func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment)
 	}
 	out.Outputs = append(out.Outputs, &output)
 
-	return out, nil
+	post := PostProcess{Steps: []*PostProcessStep{}}
+	for _, i := range cmd.Outputs {
+		g := OutputGlob{ParamName: i.Id, Glob: i.OutputBinding.Glob}
+		post.Steps = append(post.Steps, &PostProcessStep{Step: &PostProcessStep_GlobOutput{&g}})
+
+	}
+	return out, post, nil
 }
