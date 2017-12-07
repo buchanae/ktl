@@ -19,3 +19,12 @@ func (self Workflow) CommandLineTool() (CommandLineTool, error) {
 func (self Workflow) Workflow() (Workflow, error) {
 	return self, nil
 }
+
+func (self Workflow) GetStep(n string) *WorkflowStep {
+	for _, i := range self.Steps {
+		if n == i.Id {
+			return i
+		}
+	}
+	return nil
+}

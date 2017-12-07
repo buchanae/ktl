@@ -47,7 +47,7 @@ func main() {
 		cwl_path = tmp[0]
 		element_id = tmp[1]
 	}
-	cwl_docs, err := cwl.Parse(cwl_path)
+	cwl_graph, err := cwl.Parse(cwl_path)
 	if err != nil {
 		os.Stderr.WriteString(fmt.Sprintf("Unable to parse CWL document: %s\n", err))
 		if _, ok := err.(cwl.UnsupportedRequirement); ok {
@@ -55,7 +55,7 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	//log.Printf("CWLDoc: %#v", cwl_docs)
+	//log.Printf("CWLDoc: %#v", cwl_graph)
 	var inputs pbutil.JSONDict
 	mapper := cwl.URLDockerMapper{*outdir}
 	if len(flag.Args()) == 1 {
@@ -69,22 +69,22 @@ func main() {
 		}
 	}
 
-	if cwl_docs.Main == "" {
+	if cwl_graph.Main == "" {
 		if element_id == "" {
 			os.Stderr.WriteString(fmt.Sprintf("Need to define element ID\n"))
 			os.Exit(1)
 		}
-		cwl_docs.Main = element_id
+		cwl_graph.Main = element_id
 	}
 
 	var ok bool
 	var cwl_doc cwl.CWLDoc
-	cwl_doc, ok = cwl_docs.Elements[cwl_docs.Main]
+	cwl_doc, ok = cwl_graph.Elements[cwl_graph.Main]
 	if !ok {
-		cwl_doc, ok = cwl_docs.Elements["#"+cwl_docs.Main]
+		cwl_doc, ok = cwl_graph.Elements["#"+cwl_graph.Main]
 	}
 	if !ok {
-		os.Stderr.WriteString(fmt.Sprintf("Element %s not found\n", cwl_docs.Main))
+		os.Stderr.WriteString(fmt.Sprintf("Element %s not found\n", cwl_graph.Main))
 		os.Exit(1)
 	}
 
@@ -123,9 +123,9 @@ func main() {
 			fmt.Printf("%s\n", j)
 		}
 	} else if wf, err := cwl_doc.Workflow(); err == nil {
-		env := cwl.Environment{Inputs: inputs}
+		env := cwl.Environment{Inputs: inputs, DefaultImage: "ubuntu:16.04"}
 		cwl_engine := engine.NewEngine(*tes_server)
-		outputs, _ := cwl_engine.RunWorkflow(wf, mapper, env)
+		outputs, _ := cwl_engine.RunWorkflow(wf, cwl_graph, mapper, env)
 		fmt.Printf("%s\n", outputs)
 	}
 
