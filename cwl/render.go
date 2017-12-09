@@ -53,33 +53,6 @@ func (self CommandLineTool) GetImageName() string {
 	return out
 }
 
-func (self CommandLineTool) GetMappedInputs(mapper FileMapper, env Environment) []MappedInput {
-	out := []MappedInput{}
-	log.Printf("InputMap: %s", env.Inputs)
-	for _, i := range self.Inputs {
-		if i.Type.GetName() == "File" {
-			if input, ok := env.Inputs[i.Id]; ok {
-				log.Printf("Input: %s %s", i.Id, input)
-				input_dict := input.(pbutil.JSONDict)
-				if p, ok := input_dict["path"]; ok {
-					o := MappedInput{
-						StoragePath: p.(string),
-						MappedPath:  mapper.Storage2Volume(p.(string)),
-					}
-					out = append(out, o)
-				} else if p, ok := input_dict["location"]; ok {
-					o := MappedInput{
-						StoragePath: p.(string),
-						MappedPath:  mapper.Storage2Volume(p.(string)),
-					}
-					out = append(out, o)
-				}
-			}
-		}
-	}
-	return out
-}
-
 func (self CommandLineTool) SetDefaults(env Environment) Environment {
 	out := env
 	for _, x := range self.Inputs {
@@ -207,22 +180,28 @@ func (self CommandLineBinding) Evaluate(env Environment) (StringTree, error) {
 func (self CommandInputParameter) Evaluate(mapper FileMapper, env Environment) (StringTree, error) {
 	out := NewStringTree()
 	if self.InputBinding != nil {
-		if len(self.InputBinding.Prefix) > 0 {
-			out = out.Append(self.InputBinding.Prefix)
-		}
-		if len(self.InputBinding.ValueFrom) > 0 {
-			eval := JSEvaluator{Inputs: env.Inputs, Outputs: env.Outputs, Runtime: env.Runtime}
-			result, err := eval.EvaluateExpressionString(self.InputBinding.ValueFrom, nil)
-			if err != nil {
-				return NewStringTree(), err
+		if self.Type.GetName() == "boolean" {
+			if env.Inputs[self.Id].(bool) {
+				out = out.Append(self.InputBinding.Prefix)
 			}
-			out = out.Append(result)
 		} else {
-			v := self.Type.Evaluate(env.Inputs[self.Id], mapper)
-			if len(self.InputBinding.ItemSeparator) > 0 {
-				v = v.SetSeperator(self.InputBinding.ItemSeparator)
+			if len(self.InputBinding.Prefix) > 0 {
+				out = out.Append(self.InputBinding.Prefix)
 			}
-			out = out.Extend(v)
+			if len(self.InputBinding.ValueFrom) > 0 {
+				eval := JSEvaluator{Inputs: env.Inputs, Outputs: env.Outputs, Runtime: env.Runtime}
+				result, err := eval.EvaluateExpressionString(self.InputBinding.ValueFrom, nil)
+				if err != nil {
+					return NewStringTree(), err
+				}
+				out = out.Append(result)
+			} else {
+				v := self.Type.Evaluate(env.Inputs[self.Id], mapper)
+				if len(self.InputBinding.ItemSeparator) > 0 {
+					v = v.SetSeperator(self.InputBinding.ItemSeparator)
+				}
+				out = out.Extend(v)
+			}
 		}
 	}
 	return out, nil

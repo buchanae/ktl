@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"log"
 	"fmt"
+	"log"
 	//"time"
 	"github.com/ohsu-comp-bio/ktl/cwl"
 	"github.com/ohsu-comp-bio/ktl/dag"
@@ -10,14 +10,20 @@ import (
 	"strings"
 )
 
-
 func (self Engine) processEvents(in_events, out_events chan dag.Event, wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.FileMapper, env cwl.Environment) {
 	for e := range out_events {
 		log.Printf("Out: %s", e)
-		if strings.HasPrefix(e.StepId, "/") {
+		if e.StepId == "/" {
+			log.Printf("Final Step: %s", e.Params)
+			in_events <- dag.Event{
+				StepId: e.StepId,
+				Event:  dag.EventType_SUCCESS,
+				Params: e.Params,
+			}
+		} else if strings.HasPrefix(e.StepId, "/") {
 			param_name := e.StepId[1:len(e.StepId)]
 			output := pbutil.JSONDict{
-				param_name : env.Inputs[param_name],
+				param_name: env.Inputs[param_name],
 			}
 			in_events <- dag.Event{
 				StepId: e.StepId,
@@ -36,7 +42,14 @@ func (self Engine) processEvents(in_events, out_events chan dag.Event, wf cwl.Wo
 					cmd = &c
 				}
 			}
-			cmd_env := cmd.SetDefaults(cwl.Environment{Inputs: pbutil.AsMap(e.Params), DefaultImage:env.DefaultImage})
+			params := pbutil.AsMap(e.Params)
+			for _, i := range step.In {
+				if i.Default != nil {
+					log.Printf("Found Default %s %s", i.Id, pbutil.AsValue(i.Default))
+					params[i.Id] = pbutil.AsValue(i.Default)
+				}
+			}
+			cmd_env := cmd.SetDefaults(cwl.Environment{Inputs: params, DefaultImage: env.DefaultImage})
 			out, err := self.RunCommandLine(*cmd, mapper, cmd_env)
 			if err == nil {
 				in_events <- dag.Event{
@@ -56,7 +69,7 @@ func (self Engine) processEvents(in_events, out_events chan dag.Event, wf cwl.Wo
 
 func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.FileMapper, env cwl.Environment) (pbutil.JSONDict, error) {
 	log.Printf("Starting Workflow")
-
+	log.Printf("WorkflowInputs: %s", env.Inputs)
 	NWORKERS := 4
 	md := dag.MemoryDAG{}
 
@@ -70,7 +83,6 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.F
 		}()
 	}
 
-
 	steps := map[string]bool{}
 
 	//Add inputs into event dag
@@ -79,8 +91,8 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.F
 		//in input file as their output
 		event_name := fmt.Sprintf("/%s", i.Id)
 		de := dag.Event{
-			StepId:  event_name,
-			Event:   dag.EventType_NEW,
+			StepId: event_name,
+			Event:  dag.EventType_NEW,
 		}
 		in_events <- de
 		steps[event_name] = true
@@ -98,18 +110,19 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.F
 						p := strings.Split(i.Source[0], "/")
 						if len(p) == 2 {
 							d := dag.InputMapping{
-								SrcStepId:p[0],
-								SrcParamName:p[1],
-								ParamName:i.Id,
+								SrcStepId:    p[0],
+								SrcParamName: p[1],
+								ParamName:    i.Id,
 							}
+							log.Printf("InputMapping: %s", d)
 							ins = append(ins, &d)
 							deps[p[0]] = true
 						} else if len(p) == 1 {
 							event_name := fmt.Sprintf("/%s", p[0])
 							d := dag.InputMapping{
-								SrcStepId:event_name,
-								SrcParamName:p[0],
-								ParamName:i.Id,
+								SrcStepId:    event_name,
+								SrcParamName: p[0],
+								ParamName:    i.Id,
 							}
 							ins = append(ins, &d)
 							deps[event_name] = true
@@ -131,7 +144,7 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.F
 						StepId:  s.Id,
 						Event:   dag.EventType_NEW,
 						Depends: da,
-						Inputs: ins,
+						Inputs:  ins,
 					}
 					log.Printf("Add %s", de)
 					in_events <- de
@@ -141,10 +154,34 @@ func (self Engine) RunWorkflow(wf cwl.Workflow, graph cwl.CWLGraph, mapper cwl.F
 			}
 		}
 	}
-	de := dag.Event{Event: dag.EventType_CLOSE}
+	log.Printf("Starting ending")
+	//Add output to DAG
+	omap := []*dag.InputMapping{}
+	deps := []string{}
+	for _, i := range wf.Outputs {
+		p := strings.Split(i.OutputSource[0], "/")
+		m := dag.InputMapping{
+			SrcStepId:    p[0],
+			SrcParamName: p[1],
+			ParamName:    i.Id,
+		}
+		deps = append(deps, p[0])
+		omap = append(omap, &m)
+	}
+	de := dag.Event{
+		StepId:  "/",
+		Event:   dag.EventType_NEW,
+		Depends: deps,
+		Inputs:  omap,
+	}
+	log.Printf("Add %s", de)
+	in_events <- de
+
+	de = dag.Event{Event: dag.EventType_CLOSE}
 	in_events <- de
 	for i := 0; i < NWORKERS; i++ {
 		<-quit
 	}
-	return pbutil.JSONDict{}, nil
+	out_step := md.GetStep("/")
+	return pbutil.AsMap(out_step.Results), nil
 }

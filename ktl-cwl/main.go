@@ -57,7 +57,7 @@ func main() {
 	}
 	//log.Printf("CWLDoc: %#v", cwl_graph)
 	var inputs pbutil.JSONDict
-	mapper := cwl.URLDockerMapper{*outdir}
+	mapper := cwl.NewFileMapper(*outdir)
 	if len(flag.Args()) == 1 {
 		inputs = pbutil.JSONDict{}
 	} else {
@@ -102,7 +102,7 @@ func main() {
 	}
 
 	if cmd, err := cwl_doc.CommandLineTool(); err == nil {
-		env := cmd.SetDefaults(cwl.Environment{Inputs: inputs, DefaultImage: "ubuntu:16.04"})
+		env := cmd.SetDefaults(cwl.Environment{Inputs: cwl.SetInputUrl(inputs, mapper).(pbutil.JSONDict), DefaultImage: "ubuntu:16.04"})
 		if *print_flag {
 			tes_doc, post, err := engine.Render(cmd, mapper, env)
 			if err != nil {
@@ -123,10 +123,10 @@ func main() {
 			fmt.Printf("%s\n", j)
 		}
 	} else if wf, err := cwl_doc.Workflow(); err == nil {
-		env := cwl.Environment{Inputs: inputs, DefaultImage: "ubuntu:16.04"}
+		env := cwl.Environment{Inputs: cwl.SetInputUrl(inputs, mapper).(pbutil.JSONDict), DefaultImage: "ubuntu:16.04"}
 		cwl_engine := engine.NewEngine(*tes_server)
 		outputs, _ := cwl_engine.RunWorkflow(wf, cwl_graph, mapper, env)
-		fmt.Printf("%s\n", outputs)
+		j, _ := json.MarshalIndent(outputs, "", "  ")
+		fmt.Printf("%s\n", j)
 	}
-
 }

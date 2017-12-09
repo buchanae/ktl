@@ -22,12 +22,17 @@ func NewEngine(host string) Engine {
 
 func (self Engine) RunCommandLine(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment) (pbutil.JSONDict, error) {
 	log.Printf("Running CommandLineTool")
-	tes_doc, post, err := Render(cmd, mapper, env)
+	new_env := cwl.Environment{
+		Inputs:       cwl.SetInputVolumePath(env.Inputs, mapper).(pbutil.JSONDict),
+		DefaultImage: env.DefaultImage,
+	}
+	log.Printf("CommandLineInput: %s", new_env.Inputs)
+	tes_doc, post, err := Render(cmd, mapper, new_env)
 	if err != nil {
 		os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 		os.Exit(1)
 	}
-
+	log.Printf("TES: %s", tes_doc)
 	resp, err := self.client.CreateTask(context.Background(), &tes_doc)
 	if err != nil {
 		log.Printf("Error: %s", err)
@@ -36,6 +41,7 @@ func (self Engine) RunCommandLine(cmd cwl.CommandLineTool, mapper cwl.FileMapper
 
 	self.client.WaitForTask(context.Background(), resp.Id)
 	task_result, _ := self.client.GetTask(context.Background(), &tes.GetTaskRequest{Id: resp.Id, View: tes.TaskView_FULL})
+	log.Printf("Response: %s", task_result)
 
 	out := pbutil.JSONDict{}
 	for _, i := range post.Steps {
@@ -53,6 +59,6 @@ func (self Engine) RunCommandLine(cmd cwl.CommandLineTool, mapper cwl.FileMapper
 			}
 		}
 	}
-	log.Printf("Response: %s", task_result)
+	log.Printf("CommandLineOutput: %s", out)
 	return out, nil
 }

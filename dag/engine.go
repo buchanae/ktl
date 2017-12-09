@@ -9,6 +9,7 @@ import (
 type DAGEngine interface {
 	Start(chan Event) chan Event
 	ActiveCount() int
+	GetStep(string) Step
 }
 
 type MemoryDAG struct {
@@ -31,6 +32,10 @@ func (self *MemoryDAG) ActiveCount() int {
 	}
 	self.state_mutex.Unlock()
 	return i
+}
+
+func (self *MemoryDAG) GetStep(id string) Step {
+	return self.steps[id]
 }
 
 func (self *MemoryDAG) process_NEW(i Event) {

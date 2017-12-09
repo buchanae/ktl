@@ -52,51 +52,8 @@ func InputParse(path string, mapper FileMapper) (pbutil.JSONDict, error) {
 	x, _ := filepath.Abs(path)
 	base_path := filepath.Dir(x)
 
-	out := AdjustInputs(doc, base_path, mapper).(pbutil.JSONDict)
+	out := SetInputAbsPath(doc, base_path).(pbutil.JSONDict)
 	return out, err
-}
-
-func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interface{} {
-	if base, ok := input.(pbutil.JSONDict); ok {
-		out := pbutil.JSONDict{}
-		if class, ok := base["class"]; ok {
-			if class == "File" {
-				for k, v := range base {
-					if k == "path" {
-						out["path"] = mapper.Input2Storage(basePath, v.(string))
-					} else if k == "location" {
-						out["location"] = mapper.Input2Storage(basePath, v.(string))
-					} else {
-						out[k] = v
-					}
-				}
-			} else if class == "Directory" {
-				for k, v := range base {
-					if k == "path" {
-						out["path"] = mapper.Input2Storage(basePath, v.(string))
-					} else if k == "location" {
-						out["location"] = mapper.Input2Storage(basePath, v.(string))
-					} else {
-						out[k] = v
-					}
-				}
-			} else {
-				log.Printf("Unknown class type: %s", class)
-			}
-		} else {
-			for k, v := range base {
-				out[k] = AdjustInputs(v, basePath, mapper)
-			}
-		}
-		return out
-	} else if base, ok := input.([]interface{}); ok {
-		out := []interface{}{}
-		for _, i := range base {
-			out = append(out, AdjustInputs(i, basePath, mapper))
-		}
-		return out
-	}
-	return input
 }
 
 func Parse(cwl_path string) (CWLGraph, error) {

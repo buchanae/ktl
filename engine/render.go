@@ -1,9 +1,9 @@
 package engine
 
 import (
-	//"log"
 	"github.com/ohsu-comp-bio/funnel/proto/tes"
 	"github.com/ohsu-comp-bio/ktl/cwl"
+	"log"
 	"path/filepath"
 )
 
@@ -40,12 +40,13 @@ func Render(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment)
 	}
 	out.Executors = []*tes.Executor{&exec}
 
-	for _, i := range cmd.GetMappedInputs(mapper, env) {
+	for _, i := range cwl.GetFileInputs(env.Inputs) {
 		input := tes.Input{
 			Url:  i.StoragePath,
 			Path: i.MappedPath,
 			Type: tes.FileType_FILE,
 		}
+		log.Printf("Found Input: %s", i)
 		out.Inputs = append(out.Inputs, &input)
 	}
 	out.Volumes = []string{cwl.DOCKER_WORK_DIR}
