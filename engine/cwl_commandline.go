@@ -17,7 +17,8 @@ type Engine struct {
 }
 
 func NewEngine(host string) Engine {
-	return Engine{client.NewClient(host)}
+	c, _ := client.NewClient(host)
+	return Engine{c}
 }
 
 func (self Engine) RunCommandLine(cmd cwl.CommandLineTool, mapper cwl.FileMapper, env cwl.Environment) (pbutil.JSONDict, error) {
