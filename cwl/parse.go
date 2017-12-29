@@ -260,7 +260,7 @@ func FixTypeRecord(doc interface{}) pbutil.JSONDict {
 }
 
 func FixInputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
-	doc = fixForceList(doc, "doc")
+	doc = fixForceList(doc, "doc", "secondaryFiles")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["default"]; ok {
 		doc["default"] = FixDataRecord(x)
