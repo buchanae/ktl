@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -13,7 +14,7 @@ import (
 
 func mapNormalize(v interface{}) interface{} {
 	if base, ok := v.(map[interface{}]interface{}); ok {
-		out := JSONDict{}
+		out := pbutil.JSONDict{}
 		for k, v := range base {
 			out[k.(string)] = mapNormalize(v)
 		}
@@ -34,7 +35,7 @@ func mapNormalize(v interface{}) interface{} {
 	return v
 }
 
-func YamlLoad(path string) (JSONDict, error) {
+func YamlLoad(path string) (pbutil.JSONDict, error) {
 	source, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -42,60 +43,17 @@ func YamlLoad(path string) (JSONDict, error) {
 	doc := make(map[interface{}]interface{})
 	err = yaml.Unmarshal(source, &doc)
 	out := mapNormalize(doc)
-	return out.(JSONDict), nil
+	return out.(pbutil.JSONDict), nil
 }
 
-func InputParse(path string, mapper FileMapper) (JSONDict, error) {
+func InputParse(path string, mapper FileMapper) (pbutil.JSONDict, error) {
 	doc, err := YamlLoad(path)
 
 	x, _ := filepath.Abs(path)
 	base_path := filepath.Dir(x)
 
-	out := AdjustInputs(doc, base_path, mapper).(JSONDict)
+	out := SetInputAbsPath(doc, base_path).(pbutil.JSONDict)
 	return out, err
-}
-
-func AdjustInputs(input interface{}, basePath string, mapper FileMapper) interface{} {
-	if base, ok := input.(JSONDict); ok {
-		out := JSONDict{}
-		if class, ok := base["class"]; ok {
-			if class == "File" {
-				for k, v := range base {
-					if k == "path" {
-						out["path"] = mapper.Input2Storage(basePath, v.(string))
-					} else if k == "location" {
-						out["location"] = mapper.Input2Storage(basePath, v.(string))
-					} else {
-						out[k] = v
-					}
-				}
-			} else if class == "Directory" {
-				for k, v := range base {
-					if k == "path" {
-						out["path"] = mapper.Input2Storage(basePath, v.(string))
-					} else if k == "location" {
-						out["location"] = mapper.Input2Storage(basePath, v.(string))
-					} else {
-						out[k] = v
-					}
-				}
-			} else {
-				log.Printf("Unknown class type: %s", class)
-			}
-		} else {
-			for k, v := range base {
-				out[k] = AdjustInputs(v, basePath, mapper)
-			}
-		}
-		return out
-	} else if base, ok := input.([]interface{}); ok {
-		out := []interface{}{}
-		for _, i := range base {
-			out = append(out, AdjustInputs(i, basePath, mapper))
-		}
-		return out
-	}
-	return input
 }
 
 func Parse(cwl_path string) (CWLGraph, error) {
@@ -106,22 +64,51 @@ func Parse(cwl_path string) (CWLGraph, error) {
 	if base, ok := doc["$graph"]; ok {
 		log.Printf("%s\n", base)
 		//return parser.NewGraph(base)
-	} else if _, ok := doc["class"]; ok {
-		fixed_doc := FixCommandLineTool(doc)
-		jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
-		if err != nil {
-			log.Printf("%s", err)
-		}
-		log.Printf("Parsed: %s\n", jdoc)
-		cmd := CommandLineTool{}
+	} else if class, ok := doc["class"]; ok {
+		if class == "CommandLineTool" {
+			fixed_doc := FixCommandLineTool(doc)
+			jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
+			if err != nil {
+				log.Printf("%s", err)
+			}
+			log.Printf("Parsed: %s\n", jdoc)
+			cmd := CommandLineTool{}
 
-		umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
-		err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
-		if err != nil {
-			log.Printf("SchemaParseError: %s", err)
-			return CWLGraph{}, fmt.Errorf("Unable to parse file")
+			umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
+			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &cmd)
+			if err != nil {
+				log.Printf("SchemaParseError: %s", err)
+				return CWLGraph{}, fmt.Errorf("Unable to parse file %s", cwl_path)
+			}
+			return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
+		} else if class == "Workflow" {
+			fixed_doc := FixWorkflow(doc)
+			jdoc, err := json.MarshalIndent(fixed_doc, "", "   ")
+			if err != nil {
+				log.Printf("%s", err)
+			}
+			log.Printf("Parsed: %s\n", jdoc)
+			wf := Workflow{}
+			umarsh := jsonpb.Unmarshaler{AllowUnknownFields: true}
+			err = umarsh.Unmarshal(strings.NewReader(string(jdoc)), &wf)
+			if err != nil {
+				log.Printf("SchemaParseError: %s", err)
+				return CWLGraph{}, fmt.Errorf("Unable to parse file %s", cwl_path)
+			}
+			out := CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": wf}}
+			for _, s := range wf.Steps {
+				if s.Run.GetPath() != "" {
+					g, err := Parse(s.Run.GetPath())
+					if err != nil {
+						return CWLGraph{}, err
+					}
+					out.Elements[s.Run.GetPath()] = g.Elements["#"]
+				}
+			}
+			return out, nil
+		} else {
+			return CWLGraph{}, fmt.Errorf("Unknown class %s", class)
 		}
-		return CWLGraph{Main: "#", Elements: map[string]CWLDoc{"#": cmd}}, nil
 		//return parser.NewClass(doc)
 	}
 	return CWLGraph{}, fmt.Errorf("Unable to parse file")
@@ -131,7 +118,7 @@ func isDict(i interface{}) bool {
 	if _, ok := i.(map[string]interface{}); ok {
 		return true
 	}
-	if _, ok := i.(JSONDict); ok {
+	if _, ok := i.(pbutil.JSONDict); ok {
 		return true
 	}
 	return false
@@ -166,18 +153,18 @@ func contains(a []string, v string) bool {
 	return false
 }
 
-func fixDict2List(doc JSONDict, typeField string, fields ...string) JSONDict {
-	out := JSONDict{}
+func fixDict2List(doc pbutil.JSONDict, typeField string, fields ...string) pbutil.JSONDict {
+	out := pbutil.JSONDict{}
 	for k, v := range doc {
 		if contains(fields, k) {
 			if isDict(v) {
 				nv := []interface{}{}
-				for ek, ev := range v.(JSONDict) {
+				for ek, ev := range v.(pbutil.JSONDict) {
 					if isString(ev) || isList(ev) {
-						i := JSONDict{"id": ek, typeField: ev}
+						i := pbutil.JSONDict{"id": ek, typeField: ev}
 						nv = append(nv, i)
 					} else {
-						i := ev.(JSONDict)
+						i := ev.(pbutil.JSONDict)
 						i["id"] = ek
 						nv = append(nv, i)
 					}
@@ -194,8 +181,8 @@ func fixDict2List(doc JSONDict, typeField string, fields ...string) JSONDict {
 	return out
 }
 
-func fixForceList(doc JSONDict, fields ...string) JSONDict {
-	out := JSONDict{}
+func fixForceList(doc pbutil.JSONDict, fields ...string) pbutil.JSONDict {
+	out := pbutil.JSONDict{}
 	for k, v := range doc {
 		if contains(fields, k) {
 			if !isList(v) {
@@ -210,39 +197,39 @@ func fixForceList(doc JSONDict, fields ...string) JSONDict {
 	return out
 }
 
-func FixDataRecord(doc interface{}) JSONDict {
+func FixDataRecord(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
-		return JSONDict{"string_value": doc.(string)}
+		return pbutil.JSONDict{"string_value": doc.(string)}
 	}
 	if isDict(doc) {
-		return JSONDict{"struct_value": doc.(JSONDict)}
+		return pbutil.JSONDict{"struct_value": doc.(pbutil.JSONDict)}
 	}
 	if isList(doc) {
-		return JSONDict{"list_value": doc.([]interface{})}
+		return pbutil.JSONDict{"list_value": doc.([]interface{})}
 	}
 	if isFloat(doc) {
-		return JSONDict{"float_value": doc.(float32)}
+		return pbutil.JSONDict{"float_value": doc.(float32)}
 	}
 	if isInt(doc) {
-		return JSONDict{"int_value": doc}
+		return pbutil.JSONDict{"int_value": doc}
 	}
 	log.Printf("Unknown Type: %#T", doc)
-	return JSONDict{}
+	return pbutil.JSONDict{}
 }
 
-func FixTypeRecord(doc interface{}) JSONDict {
+func FixTypeRecord(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
 		doc_string := doc.(string)
 		if strings.HasSuffix(doc_string, "[]") {
-			return JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_string[:len(doc_string)-2])}}
+			return pbutil.JSONDict{"array": pbutil.JSONDict{"items": FixTypeRecord(doc_string[:len(doc_string)-2])}}
 		} else {
-			return JSONDict{"name": doc}
+			return pbutil.JSONDict{"name": doc}
 		}
 	}
 	if isDict(doc) {
-		doc_dict := doc.(JSONDict)
+		doc_dict := doc.(pbutil.JSONDict)
 		if doc_dict["type"] == "array" {
-			o := JSONDict{"array": JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
+			o := pbutil.JSONDict{"array": pbutil.JSONDict{"items": FixTypeRecord(doc_dict["items"])}}
 			if x, ok := doc_dict["inputBinding"]; ok {
 				o["inputBinding"] = x
 			}
@@ -252,12 +239,12 @@ func FixTypeRecord(doc interface{}) JSONDict {
 			doc_fields_list := doc_dict["fields"].([]interface{})
 			fields := []interface{}{}
 			for _, i := range doc_fields_list {
-				field_doc := i.(JSONDict)
-				fields = append(fields, JSONDict{"name": field_doc["name"], "type": FixTypeRecord(field_doc["type"])})
+				field_doc := i.(pbutil.JSONDict)
+				fields = append(fields, pbutil.JSONDict{"name": field_doc["name"], "type": FixTypeRecord(field_doc["type"])})
 			}
-			return JSONDict{"record": JSONDict{"name": doc_dict["name"], "fields": fields}}
+			return pbutil.JSONDict{"record": pbutil.JSONDict{"name": doc_dict["name"], "fields": fields}}
 			if doc_dict["type"] == "enum" {
-				return JSONDict{"enum": JSONDict{"name": doc_dict["name"], "symbols": doc_dict["symbols"]}}
+				return pbutil.JSONDict{"enum": pbutil.JSONDict{"name": doc_dict["name"], "symbols": doc_dict["symbols"]}}
 			}
 		}
 	}
@@ -267,13 +254,13 @@ func FixTypeRecord(doc interface{}) JSONDict {
 		for _, i := range doc_list {
 			t = append(t, FixTypeRecord(i))
 		}
-		return JSONDict{"oneof": JSONDict{"types": t}}
+		return pbutil.JSONDict{"oneof": pbutil.JSONDict{"types": t}}
 	}
-	return JSONDict{}
+	return pbutil.JSONDict{}
 }
 
-func FixInputRecordField(doc JSONDict) JSONDict {
-	doc = fixForceList(doc, "doc")
+func FixInputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
+	doc = fixForceList(doc, "doc", "secondaryFiles")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["default"]; ok {
 		doc["default"] = FixDataRecord(x)
@@ -284,22 +271,22 @@ func FixInputRecordField(doc JSONDict) JSONDict {
 func FixInputRecordFieldList(list []interface{}) interface{} {
 	out := make([]interface{}, len(list))
 	for i := range list {
-		i_doc := list[i].(JSONDict)
+		i_doc := list[i].(pbutil.JSONDict)
 		out[i] = FixInputRecordField(i_doc)
 	}
 	return out
 }
 
-func FixCommandOutputBinding(doc JSONDict) JSONDict {
+func FixCommandOutputBinding(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "glob")
 	return doc
 }
 
-func FixOutputRecordField(doc JSONDict) JSONDict {
+func FixOutputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "doc", "outputSource")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["outputBinding"]; ok {
-		doc["outputBinding"] = FixCommandOutputBinding(x.(JSONDict))
+		doc["outputBinding"] = FixCommandOutputBinding(x.(pbutil.JSONDict))
 	}
 	return doc
 }
@@ -307,17 +294,17 @@ func FixOutputRecordField(doc JSONDict) JSONDict {
 func FixOutputRecordFieldList(list []interface{}) interface{} {
 	out := make([]interface{}, len(list))
 	for i := range list {
-		i_doc := list[i].(JSONDict)
+		i_doc := list[i].(pbutil.JSONDict)
 		out[i] = FixOutputRecordField(i_doc)
 	}
 	return out
 }
 
-func FixCommandLineBinding(doc interface{}) JSONDict {
+func FixCommandLineBinding(doc interface{}) pbutil.JSONDict {
 	if isString(doc) {
-		return JSONDict{"valueFrom": doc}
+		return pbutil.JSONDict{"valueFrom": doc}
 	}
-	return doc.(JSONDict)
+	return doc.(pbutil.JSONDict)
 }
 
 func FixCommandLineBindingList(list []interface{}) interface{} {
@@ -328,7 +315,7 @@ func FixCommandLineBindingList(list []interface{}) interface{} {
 	return out
 }
 
-func FixCommandLineTool(doc JSONDict) JSONDict {
+func FixCommandLineTool(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixDict2List(doc, "type", "inputs", "outputs", "hints", "requirements")
 	doc = fixForceList(doc, "baseCommand", "doc")
 	if x, ok := doc["inputs"]; ok {
@@ -342,5 +329,90 @@ func FixCommandLineTool(doc JSONDict) JSONDict {
 	}
 	//undo stdout capture shortcuts
 
+	return doc
+}
+
+func FixWorkflowStepOutput(i interface{}) interface{} {
+	if x, ok := i.(string); ok {
+		return pbutil.JSONDict{"id": x}
+	}
+	return i
+}
+
+func FixWorkflowStepOutputList(x []interface{}) []interface{} {
+	out := []interface{}{}
+	for _, i := range x {
+		out = append(out, FixWorkflowStepOutput(i))
+	}
+	return out
+}
+
+func FixWorkflowStepInput(x interface{}) pbutil.JSONDict {
+	if i, ok := x.(string); ok {
+		return pbutil.JSONDict{"source": []interface{}{i}}
+	}
+	if i, ok := x.(pbutil.JSONDict); ok {
+		return i
+	}
+	return pbutil.JSONDict{}
+}
+
+func FixWorkflowStepInputList(x []interface{}) []interface{} {
+	out := []interface{}{}
+	for _, i := range x {
+		out = append(out, FixWorkflowStepInput(i))
+	}
+	return out
+}
+
+func FixWorkflowStepInputMap(x map[string]interface{}) []interface{} {
+	out := []interface{}{}
+	for k, v := range x {
+		i := FixWorkflowStepInput(v)
+		i["id"] = k
+		out = append(out, i)
+	}
+	return out
+}
+
+func FixWorkflowStep(doc pbutil.JSONDict) pbutil.JSONDict {
+	if x, ok := doc["in"]; ok {
+		if x_list, ok := x.([]interface{}); ok {
+			doc["in"] = FixWorkflowStepInputList(x_list)
+		}
+		if x_map, ok := x.(pbutil.JSONDict); ok {
+			doc["in"] = FixWorkflowStepInputMap(x_map)
+		}
+	}
+	if x, ok := doc["out"]; ok {
+		doc["out"] = FixWorkflowStepOutputList(x.([]interface{}))
+	}
+	if x, ok := doc["run"]; ok {
+		if x_str, ok := x.(string); ok {
+			doc["run"] = pbutil.JSONDict{"path": x_str}
+		}
+	}
+	return doc
+}
+
+func FixWorkflowStepList(list []interface{}) interface{} {
+	out := []interface{}{}
+	for _, i := range list {
+		out = append(out, FixWorkflowStep(i.(pbutil.JSONDict)))
+	}
+	return out
+}
+
+func FixWorkflow(doc pbutil.JSONDict) pbutil.JSONDict {
+	doc = fixDict2List(doc, "type", "inputs", "outputs", "hints", "requirements", "steps")
+	if x, ok := doc["inputs"]; ok {
+		doc["inputs"] = FixInputRecordFieldList(x.([]interface{}))
+	}
+	if x, ok := doc["outputs"]; ok {
+		doc["outputs"] = FixOutputRecordFieldList(x.([]interface{}))
+	}
+	if x, ok := doc["steps"]; ok {
+		doc["steps"] = FixWorkflowStepList(x.([]interface{}))
+	}
 	return doc
 }

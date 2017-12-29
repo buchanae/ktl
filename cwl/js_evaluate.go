@@ -2,6 +2,7 @@ package cwl
 
 import (
 	"fmt"
+	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"github.com/robertkrimen/otto"
 	"log"
 	"regexp"
@@ -11,12 +12,12 @@ var EXP_RE_STRING, _ = regexp.Compile(`(.*)\$\((.*)\)(.*)`)
 var EXP_RE, _ = regexp.Compile(`\$\((.*)\)`)
 
 type JSEvaluator struct {
-	Inputs  JSONDict
-	Runtime JSONDict
-	Outputs JSONDict
+	Inputs  pbutil.JSONDict
+	Runtime pbutil.JSONDict
+	Outputs pbutil.JSONDict
 }
 
-func (self *JSEvaluator) EvaluateExpressionString(expression string, js_self *JSONDict) (string, error) {
+func (self *JSEvaluator) EvaluateExpressionString(expression string, js_self *pbutil.JSONDict) (string, error) {
 
 	matches := EXP_RE_STRING.FindStringSubmatch(expression)
 	if matches == nil {
@@ -35,8 +36,8 @@ func (self *JSEvaluator) EvaluateExpressionString(expression string, js_self *JS
 	return fmt.Sprintf("%s%s%s", matches[1], out, matches[3]), err
 }
 
-func otto2map(obj *otto.Object) JSONDict {
-	out := JSONDict{}
+func otto2map(obj *otto.Object) pbutil.JSONDict {
+	out := pbutil.JSONDict{}
 	for _, i := range obj.Keys() {
 		val, _ := obj.Get(i)
 		if val.IsBoolean() {
@@ -58,11 +59,11 @@ func otto2map(obj *otto.Object) JSONDict {
 	return out
 }
 
-func (self *JSEvaluator) EvaluateExpressionObject(expression string, js_self *JSONDict) (JSONDict, error) {
+func (self *JSEvaluator) EvaluateExpressionObject(expression string, js_self *pbutil.JSONDict) (pbutil.JSONDict, error) {
 
 	matches := EXP_RE.FindStringSubmatch(expression)
 	if matches == nil {
-		return JSONDict{}, nil
+		return pbutil.JSONDict{}, nil
 	}
 	log.Printf("JS Expression: %s", matches[1])
 	vm := otto.New()

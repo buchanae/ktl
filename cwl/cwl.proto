@@ -94,7 +94,7 @@ message ExpressionToolOutputParameter {
 }
 
 message WorkflowStepInput {
-    google.protobuf.Struct default = 1; 
+    google.protobuf.Value default = 1; 
     repeated string source = 2; //[u'string', {u'items': u'string', u'type': u'array'}]
     string valueFrom = 3; //[u'string', u'Expression']
     string linkMerge = 4; 
@@ -330,7 +330,7 @@ message CommandInputParameter {
     bool streamable = 1; 
     CommandLineBinding inputBinding = 2; 
     repeated string format = 3; //[u'string', {u'items': u'string', u'type': u'array'}, u'Expression']
-    DataRecord default = 4; 
+    google.protobuf.Value default = 4; 
     repeated string doc = 5; //[u'string', {u'items': u'string', u'type': u'array'}]
     string label = 6; 
     repeated string secondaryFiles = 7; //[u'string', u'Expression', {u'items': [u'string', u'Expression'], u'type': u'array'}]

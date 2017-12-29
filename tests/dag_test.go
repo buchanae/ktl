@@ -90,7 +90,6 @@ func TestRun(t *testing.T) {
 	}
 }
 
-
 func TestInputMapping(t *testing.T) {
 	in_events := make(chan dag.Event, 100)
 	d := dag.MemoryDAG{}
@@ -98,18 +97,18 @@ func TestInputMapping(t *testing.T) {
 
 	in_events <- dag.Event{StepId: "step1", Event: dag.EventType_NEW}
 	in_events <- dag.Event{StepId: "step2",
-		Event: dag.EventType_NEW,
-		Depends:[]string{"step1"},
-		Inputs:[]*dag.InputMapping{
-			&dag.InputMapping{SrcStepId:"step1",SrcParamName:"output1",ParamName:"step1_output"},
+		Event:   dag.EventType_NEW,
+		Depends: []string{"step1"},
+		Inputs: []*dag.InputMapping{
+			&dag.InputMapping{SrcStepId: "step1", SrcParamName: "output1", ParamName: "step1_output"},
 		},
 	}
 	in_events <- dag.Event{StepId: "step3",
-		Event: dag.EventType_NEW,
-		Depends:[]string{"step1", "step2"},
-		Inputs:[]*dag.InputMapping{
-			&dag.InputMapping{SrcStepId:"step1",SrcParamName:"output1",ParamName:"input1"},
-			&dag.InputMapping{SrcStepId:"step2",SrcParamName:"output2",ParamName:"input2"},
+		Event:   dag.EventType_NEW,
+		Depends: []string{"step1", "step2"},
+		Inputs: []*dag.InputMapping{
+			&dag.InputMapping{SrcStepId: "step1", SrcParamName: "output1", ParamName: "input1"},
+			&dag.InputMapping{SrcStepId: "step2", SrcParamName: "output2", ParamName: "input2"},
 		},
 	}
 	in_events <- dag.Event{Event: dag.EventType_CLOSE}
@@ -119,8 +118,8 @@ func TestInputMapping(t *testing.T) {
 			if e.StepId == "step1" {
 				in_events <- dag.Event{
 					StepId: "step1",
-					Event: dag.EventType_SUCCESS,
-					Params: pbutil.JSONDict{"output1" : "hello world"}.AsStruct(),
+					Event:  dag.EventType_SUCCESS,
+					Params: pbutil.JSONDict{"output1": "hello world"}.AsStruct(),
 				}
 			} else if e.StepId == "step2" {
 				if e.Params.Fields["step1_output"].GetStringValue() != "hello world" {
@@ -129,8 +128,8 @@ func TestInputMapping(t *testing.T) {
 				log.Printf("Params: %s", e.Params)
 				in_events <- dag.Event{
 					StepId: "step2",
-					Event: dag.EventType_SUCCESS,
-					Params: pbutil.JSONDict{"output2" : "world hello"}.AsStruct(),
+					Event:  dag.EventType_SUCCESS,
+					Params: pbutil.JSONDict{"output2": "world hello"}.AsStruct(),
 				}
 			} else if e.StepId == "step3" {
 				if e.Params.Fields["input1"].GetStringValue() != "hello world" {
@@ -142,7 +141,7 @@ func TestInputMapping(t *testing.T) {
 				log.Printf("Params: %s", e.Params)
 				in_events <- dag.Event{
 					StepId: "step3",
-					Event: dag.EventType_SUCCESS,
+					Event:  dag.EventType_SUCCESS,
 				}
 			}
 		}

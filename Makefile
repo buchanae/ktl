@@ -35,4 +35,11 @@ dag: blank
 	Mgoogle/protobuf/struct.proto=github.com/golang/protobuf/ptypes/struct:./dag/ \
 	dag/dag.proto
 
+engine: blank
+	protoc \
+	-I engine -I googleapis \
+	--go_out=engine\
+	Mgoogle/protobuf/struct.proto=github.com/golang/protobuf/ptypes/struct:./engine/ \
+	engine/task_ops.proto
+
 blank:

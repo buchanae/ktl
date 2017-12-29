@@ -1,14 +1,15 @@
 package dag
 
 import (
+	structpb "github.com/golang/protobuf/ptypes/struct"
 	"log"
 	"sync"
-	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 type DAGEngine interface {
 	Start(chan Event) chan Event
 	ActiveCount() int
+	GetStep(string) Step
 }
 
 type MemoryDAG struct {
@@ -33,9 +34,13 @@ func (self *MemoryDAG) ActiveCount() int {
 	return i
 }
 
+func (self *MemoryDAG) GetStep(id string) Step {
+	return self.steps[id]
+}
+
 func (self *MemoryDAG) process_NEW(i Event) {
 	log.Printf("Process New: %#v", i)
-	self.steps[i.StepId] = Step{StepId: i.StepId, Depends: i.Depends, Inputs:i.Inputs}
+	self.steps[i.StepId] = Step{StepId: i.StepId, Depends: i.Depends, Inputs: i.Inputs}
 	depends := []string{}
 	in_error := false
 	for _, d := range i.Depends {
@@ -102,7 +107,7 @@ func (self *MemoryDAG) start_Step(stepId string) {
 		}
 	}
 	log.Printf("Step %s Params: %s", stepId, params)
-	self.out <- Event{StepId: stepId, Event: EventType_READY, Params:&params}
+	self.out <- Event{StepId: stepId, Event: EventType_READY, Params: &params}
 }
 
 func (self *MemoryDAG) process_SUCCESS(i Event) {

@@ -40,6 +40,7 @@ FIELD_FIX = {
         "requirements" : "repeated google.protobuf.Struct"
     },
     "WorkflowStepInput" : {
+        "default" : "google.protobuf.Value",
         "source" : "repeated string"
     },
     "WorkflowOutputParameter" : {
@@ -62,7 +63,7 @@ FIELD_FIX = {
         "arguments" : "repeated CommandLineBinding"
     },
     "CommandInputParameter" : {
-        "default" : "DataRecord"
+        "default" : "google.protobuf.Value"
     },
     "WorkflowStep" : {
         "run" : "RunRecord",
