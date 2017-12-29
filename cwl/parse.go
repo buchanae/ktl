@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/golang/protobuf/jsonpb"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/ohsu-comp-bio/ktl/pbutil"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -134,6 +135,11 @@ func isFloat(i interface{}) bool {
 	return ok
 }
 
+func isFloat64(i interface{}) bool {
+	_, ok := i.(float64)
+	return ok
+}
+
 func isInt(i interface{}) bool {
 	_, ok := i.(int)
 	return ok
@@ -197,24 +203,27 @@ func fixForceList(doc pbutil.JSONDict, fields ...string) pbutil.JSONDict {
 	return out
 }
 
-func FixDataRecord(doc interface{}) pbutil.JSONDict {
+func FixDataRecord(doc interface{}) *structpb.Value {
 	if isString(doc) {
-		return pbutil.JSONDict{"string_value": doc.(string)}
+		return pbutil.WrapValue(doc.(string))
 	}
 	if isDict(doc) {
-		return pbutil.JSONDict{"struct_value": doc.(pbutil.JSONDict)}
+		return pbutil.WrapValue(doc.(pbutil.JSONDict))
 	}
 	if isList(doc) {
-		return pbutil.JSONDict{"list_value": doc.([]interface{})}
+		return pbutil.WrapValue(doc.([]interface{}))
 	}
 	if isFloat(doc) {
-		return pbutil.JSONDict{"float_value": doc.(float32)}
+		return pbutil.WrapValue(doc.(float32))
+	}
+	if isFloat64(doc) {
+		return pbutil.WrapValue(doc.(float64))
 	}
 	if isInt(doc) {
-		return pbutil.JSONDict{"int_value": doc}
+		return pbutil.WrapValue(doc)
 	}
 	log.Printf("Unknown Type: %#T", doc)
-	return pbutil.JSONDict{}
+	return &structpb.Value{}
 }
 
 func FixTypeRecord(doc interface{}) pbutil.JSONDict {
@@ -263,7 +272,7 @@ func FixInputRecordField(doc pbutil.JSONDict) pbutil.JSONDict {
 	doc = fixForceList(doc, "doc", "secondaryFiles")
 	doc["type"] = FixTypeRecord(doc["type"])
 	if x, ok := doc["default"]; ok {
-		doc["default"] = FixDataRecord(x)
+		doc["default"] = x //FixDataRecord(x) //BUG: may want to work on number conversion (like INTs) as the may get re-classed at floats, which will change how they render to string
 	}
 	return doc
 }

@@ -104,7 +104,11 @@ func main() {
 	if cmd, err := cwl_doc.CommandLineTool(); err == nil {
 		env := cmd.SetDefaults(cwl.Environment{Inputs: cwl.SetInputUrl(inputs, mapper).(pbutil.JSONDict), DefaultImage: "ubuntu:16.04"})
 		if *print_flag {
-			tes_doc, post, err := engine.Render(cmd, mapper, env)
+			new_env := cwl.Environment{
+				Inputs:       cwl.SetInputVolumePath(env.Inputs, mapper).(pbutil.JSONDict),
+				DefaultImage: env.DefaultImage,
+			}
+			tes_doc, post, err := engine.Render(cmd, mapper, new_env)
 			if err != nil {
 				os.Stderr.WriteString(fmt.Sprintf("Command line render failed %s\n", err))
 				os.Exit(1)

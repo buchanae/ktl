@@ -60,8 +60,12 @@ func (self CommandLineTool) SetDefaults(env Environment) Environment {
 			if x.Default != nil {
 				if y, ok := x.Default.GetKind().(*structpb.Value_StringValue); ok {
 					out.Inputs[x.Id] = y.StringValue
+				} else if _, ok := x.Default.GetKind().(*structpb.Value_NumberValue); ok {
+					out.Inputs[x.Id] = fmt.Sprintf("%f", x.Default.GetNumberValue()) //BUG: string rendering on default floats may add some extra digits to number
 				} else if y, ok := x.Default.GetKind().(*structpb.Value_StructValue); ok {
 					out.Inputs[x.Id] = pbutil.AsMap(y.StructValue)
+				} else {
+					log.Printf("Unknown default type")
 				}
 			}
 		}
