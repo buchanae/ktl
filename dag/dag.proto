@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package dag;
+
+import "google/protobuf/struct.proto";
+
+message Step {
+  string step_id = 1;
+  repeated string depends = 2;
+  repeated InputMapping inputs = 3;
+  google.protobuf.Struct results = 4;
+}
+
+enum EventType {
+  UNKNOWN  = 0;
+  NEW      = 1;
+  READY    = 2;
+  RUNNING  = 3;
+  SUCCESS  = 4;
+  FAILURE  = 5;
+  CANCELED = 6;
+  CLOSE    = 7;
+}
+
+message InputMapping {
+  string src_step_id = 1;
+  string src_param_name = 2;
+  string param_name = 3;
+}
+
+message Event {
+  string step_id = 1;
+  EventType event = 2;
+  repeated string depends = 3;
+  repeated InputMapping inputs = 4;
+  google.protobuf.Struct params = 5;
+}
+
+message DAGState {
+  string dag_id = 1;
+  google.protobuf.Struct inputs = 2;
+  map<string, google.protobuf.Struct> results = 3;
+  google.protobuf.Struct outputs = 4;
+}
