@@ -64,6 +64,10 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
       continue
     }
 
+    // TODO while the process loop might happen often, it might not, and if it's slow
+    //      deadlines and timeouts might be imprecise. would be nice to have a system
+    //      with high precision.
+
     // Check the step deadline.
 		if step.Deadline != nil && step.Deadline.Sub(time.Now()) < 0 {
 			step.State = Failed
@@ -78,7 +82,9 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		}
 
     // Check the step timeout.
-		if step.StartedAt != nil && step.Timeout > 0 && time.Now().Sub(*step.StartedAt) > step.Timeout {
+		if step.StartedAt != nil && step.Timeout > 0 &&
+       time.Now().Sub(*step.StartedAt) > time.Duration(step.Timeout) {
+
 			step.State = Failed
 			step.Reason = "timeout exceeded"
 

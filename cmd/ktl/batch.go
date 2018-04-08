@@ -4,9 +4,10 @@ import (
   "context"
   "fmt"
   "encoding/json"
-  "time"
+  "io/ioutil"
   "os"
   "github.com/ohsu-comp-bio/ktl"
+  "github.com/ghodss/yaml"
   "github.com/spf13/cobra"
 )
 
@@ -16,33 +17,42 @@ var batchCmd = &cobra.Command{
 
 var createBatchCmd = &cobra.Command{
   Use: "create",
+  Args: cobra.ExactArgs(1),
   RunE: func(cmd *cobra.Command, args []string) error {
-    cli := ktl.NewClient("http://"+ktl.DefaultListen)
-    ctx := context.Background()
-
-    b := &ktl.Batch{
-      Steps: []*ktl.Step{
-        {
-          ID: "test-1",
-          Type: "Task",
-        },
-        {
-          ID: "test-2",
-          Type: "Task",
-          Dependencies: []string{"test-1"},
-          Timeout: 5 * time.Second,
-        },
-      },
-    }
-
-    resp, err := cli.CreateBatch(ctx, b)
+    id, err := createBatch(args[0])
     if err != nil {
       return err
     }
-
-    fmt.Println(resp.ID)
+    fmt.Println(id)
     return nil
   },
+}
+
+func createBatch(path string) (id string, err error) {
+  cli := ktl.NewClient("http://"+ktl.DefaultListen)
+  ctx := context.Background()
+
+  b, err := ioutil.ReadFile(path)
+  if err != nil {
+    return "", fmt.Errorf("reading batch file: %s", err)
+  }
+
+  batch := &ktl.Batch{}
+  err = yaml.Unmarshal(b, batch)
+  if err != nil {
+    return "", fmt.Errorf("unmarshaling batch file: %s", err)
+  }
+
+  err = ktl.ValidateBatch(batch)
+  if err != nil {
+    return "", fmt.Errorf("validating batch: %s", err)
+  }
+
+  resp, err := cli.CreateBatch(ctx, batch)
+  if err != nil {
+    return "", err
+  }
+  return resp.ID, nil
 }
 
 var listBatchCmd = &cobra.Command{

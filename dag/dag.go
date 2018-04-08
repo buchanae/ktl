@@ -2,6 +2,7 @@ package dag
 
 import (
 	"fmt"
+  "strings"
 )
 
 /* TODO
@@ -258,6 +259,7 @@ func Count(dag *DAG, nodes []Node) Counts {
 	}
 }
 
+/*
 // TODO FailFast is more interesting if it stops/cancels
 //      running tasks on the first error.
 // TODO need to check Blocked or something to
@@ -279,6 +281,7 @@ var ErrBlocked = fmt.Errorf("all remaining nodes are blocked")
 func BestEffort(dag *DAG, nodes []Node) ([]Node, error) {
   return Ready(dag, nodes), nil
 }
+*/
 
 type ErrorList struct {
 	Errors []error
@@ -289,9 +292,9 @@ func (e *ErrorList) Error() string {
 		return ""
 	}
 
-	s := "Errors:"
+  var errs []string
 	for _, err := range e.Errors {
-		s += "- " + err.Error()
+    errs = append(errs, err.Error())
 	}
-	return s
+	return "Errors: " + strings.Join(errs, "; ")
 }

@@ -18,17 +18,30 @@ actions
 
 step exec history
 
+state reconciler
+- need something that is tolerant to errors occurring while driving steps
+  e.g. if driver.Stop() fails, a system should be able to revisit this
+  steps and try again. also, provides an easy way for users to modify
+  the desired state of the steps. also, possibly allows drivers to
+  exist as clients.
+
 tasks:
 - retries
 - manual restart
 - canned tasks: run notebook, etc.
 
+configuration and cli/env
+
+dashboard
+
 step types:
 - wait for file
+- wait for time.
 - wait for query change
 - somehow use task stdout to generate next step?
 - wait for task
 - wait for event
+- task that waits for input files
 -- what happens when the event comes in twice? and the last is still running?
    map to separate tasks? restart?
    -- this is more like a task that starts a new batch. some code, whether template
@@ -37,6 +50,7 @@ step types:
 - curl/import
 - galaxy
 - cwl
+- can a step run multiple times?
 
 hard:
 - secret management
@@ -81,7 +95,7 @@ type Step struct {
 
   // Timeout is used to require the a step finish within a given time frame,
   // starting when step is started.
-	Timeout  time.Duration `json:"timeout,omitempty"`
+	Timeout   Duration `json:"timeout,omitempty"`
   // Deadline is used to require that a step finish before a certain time.
 	Deadline *time.Time    `json:"deadline,omitempty"`
 
