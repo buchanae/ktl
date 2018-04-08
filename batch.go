@@ -36,6 +36,8 @@ dashboard
 
 step types:
 - add existing tasks, without creation
+- wait for github PR to be merged.
+- task array
 - wait for file
 - wait for time.
 - wait for query change

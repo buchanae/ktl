@@ -60,7 +60,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		driver, ok := drivers[step.Type]
 		if !ok {
 			step.State = Failed
-			step.Reason = fmt.Sprint(`unknown driver "%s"`, step.Type)
+			step.Reason = fmt.Sprintf(`unknown driver "%s"`, step.Type)
 			continue
 		}
 
@@ -76,7 +76,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 			// TODO think about best error handling
 			err := driver.Stop(ctx, step)
 			if err != nil {
-				log.Println("error stopping step %s: %s", step.ID, err)
+				log.Printf("error stopping step %s: %s\n", step.ID, err)
 			}
 			continue
 		}
@@ -91,7 +91,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 			// TODO think about best error handling
 			err := driver.Stop(ctx, step)
 			if err != nil {
-				log.Println("error stopping step %s: %s", step.ID, err)
+				log.Printf("error stopping step %s: %s\n", step.ID, err)
 			}
 			continue
 		}
@@ -99,7 +99,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		// TODO better error handling?
 		err := driver.Check(ctx, step)
 		if err != nil {
-			log.Println("error checking step %s: %s", step.ID, err)
+			log.Printf("error checking step %s: %s\n", step.ID, err)
 		}
 	}
 
@@ -135,7 +135,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 				//      might want something that continuously reconciles current/desired state.
 				err := driver.Stop(ctx, step)
 				if err != nil {
-					log.Println("error stopping step %s: %s", step.ID, err)
+					log.Printf("error stopping step %s: %s\n", step.ID, err)
 				}
 			}
 		}
@@ -150,7 +150,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		// TODO think about best error handling
 		err := driver.Start(ctx, step)
 		if err != nil {
-			log.Println("error starting step %s: %s", step.ID, err)
+			log.Printf("error starting step %s: %s\n", step.ID, err)
 		}
 	}
 }

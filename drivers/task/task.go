@@ -57,7 +57,6 @@ func (d *Driver) Check(ctx context.Context, step *ktl.Step) error {
 }
 
 func (d *Driver) Start(ctx context.Context, step *ktl.Step) error {
-  step.State = ktl.Running
 
   task := &tes.Task{}
   err := mapstructure.Decode(step.Config, task)
@@ -71,6 +70,7 @@ func (d *Driver) Start(ctx context.Context, step *ktl.Step) error {
   }
 
   startTime := time.Now()
+  step.State = ktl.Running
   step.StartedAt = &startTime
   step.Logs = taskData{ID: resp.Id}
   return nil
