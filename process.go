@@ -148,6 +148,10 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		driver := drivers[step.Type]
 
 		// TODO think about best error handling
+    //      what happens when funnel server is gone and start fails?
+    //      probably ok to keep retrying to start, but what happens to the logs?
+    //      could get pretty spammy. also, should it backoff?
+    //      aren't there other types of failures that shouldn't be retried?
 		err := driver.Start(ctx, step)
 		if err != nil {
 			log.Printf("error starting step %s: %s\n", step.ID, err)

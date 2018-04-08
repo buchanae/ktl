@@ -10,6 +10,8 @@ import (
 /*
 TODO
 Batch editing/versioning
+- want to mimic kubectl create/apply. want to manage a batch by recursively scanning
+  a directory of declarations. but, merge-based updates will be hard.
 
 actions
 - force invalidate step manually
@@ -32,6 +34,8 @@ tasks:
 
 configuration and cli/env
 
+paused state
+
 dashboard
 
 step types:
@@ -39,18 +43,20 @@ step types:
 - wait for github PR to be merged.
 - task array
 - wait for file
-- wait for time.
+- wait for time
 - wait for query change
 - somehow use task stdout to generate next step?
 - wait for task
-- wait for event
 - task that waits for input files
+-- after a task has finished, if the file disappears, how can ktl convey this usefully?
+   
+- wait for event
 -- what happens when the event comes in twice? and the last is still running?
    map to separate tasks? restart?
    -- this is more like a task that starts a new batch. some code, whether template
       driven or not, would need to map the event data to a task/workflow/batch.
       dynamic batches (batches that can modify themselves)?
-- curl/import
+
 - galaxy
 - cwl
 - can a step run multiple times?

@@ -8,6 +8,7 @@ import (
 const (
 	Idle State = iota
 	Running
+  Paused
 	Failed
 	Success
 )
@@ -21,6 +22,7 @@ func (s *State) String() string {
 		return "Idle"
 	case Running:
 		return "Running"
+
 	case Failed:
 		return "Failed"
 	case Success:
