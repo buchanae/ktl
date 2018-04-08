@@ -2,9 +2,9 @@ package ktl
 
 import (
 	"context"
-  "log"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -30,7 +30,7 @@ var ErrNotFound = fmt.Errorf("not found")
 func Serve(db Database) error {
 	s := newServer(db)
 	http.Handle("/v0/", http.StripPrefix("/v0", s))
-  log.Println("Listening on", DefaultListen)
+	log.Println("Listening on", DefaultListen)
 	return http.ListenAndServe(DefaultListen, nil)
 }
 

@@ -1,9 +1,9 @@
 package ktl
 
 import (
+	"fmt"
 	"github.com/ohsu-comp-bio/ktl/dag"
 	"github.com/rs/xid"
-  "fmt"
 	"time"
 )
 
@@ -75,7 +75,7 @@ type Batch struct {
 
 	// Status
 	State  State       `json:"state"`
-  Reason string      `json:"reason,omitempty"`
+	Reason string      `json:"reason,omitempty"`
 	Logs   interface{} `json:"logs,omitempty"`
 	Counts dag.Counts  `json:"counts"`
 }
@@ -93,18 +93,18 @@ type Step struct {
 	// driver uses to define the details of the step.
 	Config interface{} `json:"config,omitempty"`
 
-  // Timeout is used to require the a step finish within a given time frame,
-  // starting when step is started.
-	Timeout   Duration `json:"timeout,omitempty"`
-  // Deadline is used to require that a step finish before a certain time.
-	Deadline *time.Time    `json:"deadline,omitempty"`
+	// Timeout is used to require the a step finish within a given time frame,
+	// starting when step is started.
+	Timeout Duration `json:"timeout,omitempty"`
+	// Deadline is used to require that a step finish before a certain time.
+	Deadline *time.Time `json:"deadline,omitempty"`
 
-	State     State       `json:"state"`
-  // Reason describes why the step failed.
-  Reason string      `json:"reason,omitempty"`
-	StartedAt *time.Time  `json:"startedAt,omitempty"`
-  // Logs holds opaque, driver-specific log data.
-	Logs      interface{} `json:"logs,omitempty"`
+	State State `json:"state"`
+	// Reason describes why the step failed.
+	Reason    string     `json:"reason,omitempty"`
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+	// Logs holds opaque, driver-specific log data.
+	Logs interface{} `json:"logs,omitempty"`
 }
 
 // Done returns true if the step is in a final state: success or failed.
@@ -121,10 +121,10 @@ func (s *Step) Running() bool {
 // Error returns an error with Step.Reason if the step state is Failed,
 // otherwise Error returns nil.
 func (s *Step) Error() error {
-  if s.State == Failed {
-    return fmt.Errorf(s.Reason)
-  }
-  return nil
+	if s.State == Failed {
+		return fmt.Errorf(s.Reason)
+	}
+	return nil
 }
 
 // NewBatchID generates a new, globally unique ID.

@@ -8,7 +8,7 @@ import (
 const (
 	Idle State = iota
 	Running
-  Failed
+	Failed
 	Success
 )
 
@@ -39,8 +39,8 @@ func (s *State) UnmarshalText(b []byte) error {
 		*s = Idle
 	case "Running":
 		*s = Running
-  case "Failed":
-    *s = Failed
+	case "Failed":
+		*s = Failed
 	case "Success":
 		*s = Success
 	default:
