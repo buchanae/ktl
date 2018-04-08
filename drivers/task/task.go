@@ -58,14 +58,14 @@ func (d *Driver) Check(ctx context.Context, step *ktl.Step) error {
 
 func (d *Driver) Start(ctx context.Context, step *ktl.Step) error {
   step.State = ktl.Running
-  resp, err := d.cli.CreateTask(ctx, &tes.Task{
-    Executors: []*tes.Executor{
-      {
-        Image:   "alpine",
-        Command: []string{"sleep", "25"},
-      },
-    },
-  })
+
+  task := &tes.Task{}
+  err := mapstructure.Decode(step.Config, task)
+  if err != nil {
+    return fmt.Errorf("decoding task config: %s", err)
+  }
+
+  resp, err := d.cli.CreateTask(ctx, task)
   if err != nil {
     return fmt.Errorf("creating task: %s", err)
   }

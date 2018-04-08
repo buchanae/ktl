@@ -118,6 +118,8 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		return
 	}
 
+  // In fail fast mode, the batch stops one the first error encountered,
+  // stopping any steps which are running.
 	if batch.Mode == FailFast && err != nil {
 		batch.State = Failed
 		batch.Reason = err.Error()

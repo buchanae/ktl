@@ -35,6 +35,7 @@ configuration and cli/env
 dashboard
 
 step types:
+- add existing tasks, without creation
 - wait for file
 - wait for time.
 - wait for query change
