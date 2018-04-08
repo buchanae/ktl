@@ -2,6 +2,7 @@ package ktl
 
 import (
 	"context"
+  "log"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,8 +11,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// DefaultListen is host/port ktl will listen on by default.
 const DefaultListen = "localhost:8543"
 
+// Database describes the interface implemented by database backends such as mongo,
+// providing access to storing and retrieving batches.
 type Database interface {
 	CreateBatch(context.Context, *Batch) error
 	ListBatches(context.Context, *BatchListOptions) ([]*Batch, error)
@@ -19,14 +23,18 @@ type Database interface {
 	UpdateBatch(context.Context, *Batch) error
 }
 
+// ErrNotFound is returned by database backends when an item can't be found.
 var ErrNotFound = fmt.Errorf("not found")
 
+// Serve runs a HTTP server, serving the ktl REST API.
 func Serve(db Database) error {
 	s := newServer(db)
 	http.Handle("/v0/", http.StripPrefix("/v0", s))
+  log.Println("Listening on", DefaultListen)
 	return http.ListenAndServe(DefaultListen, nil)
 }
 
+// server provides REST API endpoint handling.
 type server struct {
 	db     Database
 	router *mux.Router
@@ -58,6 +66,9 @@ func newServer(db Database) *server {
 func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.router.ServeHTTP(w, req)
 }
+
+// TODO there's a bit of boilerplate in these handlers that could probably
+//      be usefully abstracted.
 
 // createBatch creates a new Batch entity in the database and returns its ID.
 func (s *server) createBatch(w http.ResponseWriter, req *http.Request) {

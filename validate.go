@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// ValidateBatch validates the given batch based on the rules/logic required
+// by the CreateBatch endpoint. The return type is MultiError, containing
+// a list of multiple validation errors, or nil if the batch is valid.
 func ValidateBatch(b *Batch) error {
 	var errs []error
 	err := func(format string, args ...interface{}) {
@@ -47,6 +50,7 @@ func ValidateBatch(b *Batch) error {
 	return MultiError(errs)
 }
 
+// MultiError provides a wrapper for a list of errors.
 type MultiError []error
 
 func (me MultiError) Error() string {

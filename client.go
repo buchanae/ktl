@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
+// Client provides access to the ktl REST API.
 type Client struct {
 	Address string
 	Client  *http.Client
 }
 
+// NewClient returns a new Client.
 func NewClient(address string) *Client {
 	return &Client{
 		Address: address,
@@ -24,6 +26,7 @@ func NewClient(address string) *Client {
 	}
 }
 
+// CreateBatch creates a new Batch and returns the ID of the created batch.
 func (c *Client) CreateBatch(ctx context.Context, b *Batch) (*CreateBatchResponse, error) {
 	err := ValidateBatch(b)
 	if err != nil {
@@ -47,6 +50,8 @@ func (c *Client) CreateBatch(ctx context.Context, b *Batch) (*CreateBatchRespons
 	return out, err
 }
 
+// ListBatches lists batches.
+// TODO pass in list options.
 func (c *Client) ListBatches(ctx context.Context) (*BatchList, error) {
 	u := c.Address + "/v0/batch"
 	req, err := http.NewRequest("GET", u, nil)
@@ -60,6 +65,7 @@ func (c *Client) ListBatches(ctx context.Context) (*BatchList, error) {
 	return out, err
 }
 
+// GetBatch gets a batch by ID.
 func (c *Client) GetBatch(ctx context.Context, id string) (*Batch, error) {
 	u := c.Address + "/v0/batch/" + id
 	req, err := http.NewRequest("GET", u, nil)

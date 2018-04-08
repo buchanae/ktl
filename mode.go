@@ -17,6 +17,7 @@ const (
 // Mode determines how the execution engine will handle errors.
 type Mode int
 
+// String returns the string representation of Mode: BestError, FailFast, etc.
 func (m *Mode) String() string {
 	switch *m {
 	case BestEffort:
@@ -27,10 +28,14 @@ func (m *Mode) String() string {
 	return "Unknown"
 }
 
+// MarshalText marshals the mode to text, which enables JSON to use
+// the string version instead of an int.
 func (m *Mode) MarshalText() ([]byte, error) {
 	return []byte(m.String()), nil
 }
 
+// UnmarshalText unmarshals the mode from text, which enables JSON to use
+// the string version instead of an int.
 func (m *Mode) UnmarshalText(b []byte) error {
 	switch string(b) {
 	case "BestEffort":

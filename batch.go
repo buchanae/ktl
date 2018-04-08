@@ -34,7 +34,6 @@ step types:
    -- this is more like a task that starts a new batch. some code, whether template
       driven or not, would need to map the event data to a task/workflow/batch.
       dynamic batches (batches that can modify themselves)?
-- task with timeout
 - curl/import
 - galaxy
 - cwl
@@ -80,24 +79,33 @@ type Step struct {
 	// driver uses to define the details of the step.
 	Config interface{} `json:"config,omitempty"`
 
+  // Timeout is used to require the a step finish within a given time frame,
+  // starting when step is started.
 	Timeout  time.Duration `json:"timeout,omitempty"`
+  // Deadline is used to require that a step finish before a certain time.
 	Deadline *time.Time    `json:"deadline,omitempty"`
 
-	// Status
 	State     State       `json:"state"`
+  // Reason describes why the step failed.
   Reason string      `json:"reason,omitempty"`
 	StartedAt *time.Time  `json:"startedAt,omitempty"`
+  // Logs holds opaque, driver-specific log data.
 	Logs      interface{} `json:"logs,omitempty"`
 }
 
+// Done returns true if the step is in a final state: success or failed.
 func (s *Step) Done() bool {
 	return s.State == Success || s.State == Failed
 }
 
+// Running returns true if the step state is Running.
+// Mostly exists to fulfill dag.Node interface.
 func (s *Step) Running() bool {
 	return s.State == Running
 }
 
+// Error returns an error with Step.Reason if the step state is Failed,
+// otherwise Error returns nil.
 func (s *Step) Error() error {
   if s.State == Failed {
     return fmt.Errorf(s.Reason)
@@ -105,6 +113,7 @@ func (s *Step) Error() error {
   return nil
 }
 
+// NewBatchID generates a new, globally unique ID.
 func NewBatchID() string {
 	return xid.New().String()
 }
@@ -115,6 +124,8 @@ type CreateBatchResponse struct {
 	ID string `json:"id"`
 }
 
+// BatchListOptions describes filters and pagination options used while
+// querying for a list of batches.
 type BatchListOptions struct {
 	State    []State           `json:"state"`
 	Tags     map[string]string `json:"tags"`
@@ -122,6 +133,7 @@ type BatchListOptions struct {
 	PageSize int               `json:"pageSize"`
 }
 
+// GetPageSize returns a page size within the allowed range [10, 500].
 func (b *BatchListOptions) GetPageSize() int {
 	if b.PageSize < 0 {
 		return 10
@@ -139,6 +151,7 @@ type BatchList struct {
 	NextPage string   `json:"nextPage"`
 }
 
+// BatchDAG builds a new DAG datastructure from the given batch's steps.
 func BatchDAG(batch *Batch) *dag.DAG {
 	d := dag.NewDAG()
 	for _, step := range batch.Steps {
@@ -153,6 +166,7 @@ func BatchDAG(batch *Batch) *dag.DAG {
 	return d
 }
 
+// UpdateBatchCounts modifies the given batch, updating the Batch.Counts field.
 func UpdateBatchCounts(batch *Batch) {
 	d := BatchDAG(batch)
 	batch.Counts = dag.Count(d, d.AllNodes())

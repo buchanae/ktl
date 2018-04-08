@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// TODO might want to match steps to dag steps. missing blocked, etc.
 const (
 	Idle State = iota
 	Running
@@ -11,6 +12,7 @@ const (
 	Success
 )
 
+// State describes the state of a batch or step.
 type State int
 
 func (s *State) String() string {
