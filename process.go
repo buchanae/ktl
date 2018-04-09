@@ -2,19 +2,60 @@ package ktl
 
 import (
 	"context"
-	"fmt"
 	"github.com/ohsu-comp-bio/ktl/dag"
 	"log"
 	"time"
 )
 
+const (
+	Start EventType = iota
+	Stop
+)
+
+// EventType enumerates the types of events available.
+type EventType int
+
+//go:generate enumer -type=EventType -text
+
+// Event describes an event occurring during the lifetime of a step,
+// usually due to a state change, such as "start" or "stop".
+// Events are used while processing step drivers.
+type Event struct {
+	Type      EventType `json:"type"`
+	CreatedAt time.Time `json:"createdAt"`
+	// Processed is set to true when the event has been successfully
+	// processed by the step driver.
+	Processed bool `json:"processed"`
+	// Attempts records the number of times event processing has been
+	// attempted. The batch processor may decide to give up if the
+	// event has been attempted too many times.
+	Attempts int `json:"attempts"`
+}
+
+// NewEvent creates a new event of the given type, with the timestamp
+// set to now.
+func NewEvent(t EventType) Event {
+	return Event{Type: t, CreatedAt: time.Now()}
+}
+
+// DriverSpec is used to pass limited step information to drivers,
+// so it's more clear what information a driver is expected to access/modify.
+type DriverSpec struct {
+	BatchID string
+	StepID  string
+	State   State
+	Reason  string
+	Config  interface{}
+	Logs    interface{}
+}
+
 // Driver is the interface fulfilled by a step driver.
 // Drivers are responsible for managing the state of a step.
 // There are many types of drivers: start a task, wait for an event, etc.
 type Driver interface {
-	Check(context.Context, *Step) error
-	Start(context.Context, *Step) error
-	Stop(context.Context, *Step) error
+	Check(context.Context, *DriverSpec) error
+	Start(context.Context, *DriverSpec) error
+	Stop(context.Context, *DriverSpec) error
 }
 
 // Process is the main control loop, responsible for managing the state
@@ -29,7 +70,7 @@ func Process(db Database, drivers map[string]Driver) {
 
 		// Get all active batches
 		batches, err := db.ListBatches(ctx, &BatchListOptions{
-			State: []State{Idle, Running},
+			State: []State{Waiting, Ready, Active},
 		})
 		if err != nil {
 			log.Println("error listing batches", err)
@@ -38,7 +79,7 @@ func Process(db Database, drivers map[string]Driver) {
 
 		// For each batch, reconcile any state changes.
 		for _, batch := range batches {
-			processBatch(ctx, batch, db, drivers)
+			processBatch(ctx, batch)
 
 			err = db.UpdateBatch(ctx, batch)
 			if err != nil {
@@ -49,18 +90,11 @@ func Process(db Database, drivers map[string]Driver) {
 }
 
 // processBatch processes a single batch. This is where most of the work happens.
-func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[string]Driver) {
+func processBatch(ctx context.Context, batch *Batch) {
 	defer UpdateBatchCounts(batch)
 
 	for _, step := range batch.Steps {
-		if step.Done() {
-			continue
-		}
-
-		driver, ok := drivers[step.Type]
-		if !ok {
-			step.State = Failed
-			step.Reason = fmt.Sprintf(`unknown driver "%s"`, step.Type)
+		if step.State.Done() || step.State == Paused {
 			continue
 		}
 
@@ -72,12 +106,7 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 		if step.Deadline != nil && step.Deadline.Sub(time.Now()) < 0 {
 			step.State = Failed
 			step.Reason = "deadline exceeded"
-
-			// TODO think about best error handling
-			err := driver.Stop(ctx, step)
-			if err != nil {
-				log.Printf("error stopping step %s: %s\n", step.ID, err)
-			}
+			step.Events = append(step.Events, Stop)
 			continue
 		}
 
@@ -87,74 +116,50 @@ func processBatch(ctx context.Context, batch *Batch, db Database, drivers map[st
 
 			step.State = Failed
 			step.Reason = "timeout exceeded"
-
-			// TODO think about best error handling
-			err := driver.Stop(ctx, step)
-			if err != nil {
-				log.Printf("error stopping step %s: %s\n", step.ID, err)
-			}
+			step.Events = append(step.Events, NewEvent(Stop))
 			continue
-		}
-
-		// TODO better error handling?
-		err := driver.Check(ctx, step)
-		if err != nil {
-			log.Printf("error checking step %s: %s\n", step.ID, err)
 		}
 	}
 
-	// Calculate the next available steps
-	d := BatchDAG(batch)
-	ready := dag.Ready(d, d.AllNodes())
-	err := dag.Errors(d.AllNodes())
+	var failed []*Step
+	for _, step := range batch.Steps {
+		if step.State == Failed {
+			failed = append(failed, step)
+		}
+	}
 
+	// TODO check how this behaves with blocked nodes.
+	d := BatchDAG(batch)
 	if dag.AllDone(d.AllNodes()) {
-		if err != nil {
+		if failed != nil {
 			batch.State = Failed
-			batch.Reason = err.Error()
 		} else {
 			batch.State = Success
 		}
 		return
 	}
 
-  // In fail fast mode, the batch stops one the first error encountered,
-  // stopping any steps which are running.
-	if batch.Mode == FailFast && err != nil {
+	// In fail fast mode, the batch stops one the first error encountered,
+	// stopping any steps which are running.
+	if batch.Mode == FailFast && failed != nil {
 		batch.State = Failed
-		batch.Reason = err.Error()
 
+		// Stop any active steps.
 		for _, step := range batch.Steps {
-			if step.State == Running {
-
-				driver := drivers[step.Type]
+			if step.State == Active {
 				step.State = Failed
 				step.Reason = "batch failed fast"
-
-				// TODO think about best error handling
-				//      might want something that continuously reconciles current/desired state.
-				err := driver.Stop(ctx, step)
-				if err != nil {
-					log.Printf("error stopping step %s: %s\n", step.ID, err)
-				}
+				step.Events = append(step.Events, NewEvent(Stop))
 			}
 		}
 		return
 	}
 
-	// Execute next steps, using available step drivers.
+	// Execute next steps.
+	ready := dag.Ready(d, d.AllNodes())
 	for _, node := range ready {
 		step := node.(*Step)
-		driver := drivers[step.Type]
-
-		// TODO think about best error handling
-    //      what happens when funnel server is gone and start fails?
-    //      probably ok to keep retrying to start, but what happens to the logs?
-    //      could get pretty spammy. also, should it backoff?
-    //      aren't there other types of failures that shouldn't be retried?
-		err := driver.Start(ctx, step)
-		if err != nil {
-			log.Printf("error starting step %s: %s\n", step.ID, err)
-		}
+		step.State = Ready
+		step.Events = append(step.Events, NewEvent(Start))
 	}
 }

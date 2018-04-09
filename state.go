@@ -1,15 +1,20 @@
 package ktl
 
-// TODO might want to match steps to dag steps. missing blocked, etc.
 const (
-	Idle State = iota
-	Running
-  Paused
-	Failed
+	Waiting State = iota
+	Paused
+	Ready
+	Active
 	Success
+	Failed
 )
 
-// State describes the state of a batch or step.
+// State describes the state of a step.
 type State int
+
+// Done returns true if the state is Succeeded or Failed.
+func (s State) Done() bool {
+	return s == Success || s == Failed
+}
 
 //go:generate enumer -type=State -text

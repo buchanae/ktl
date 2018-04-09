@@ -21,9 +21,9 @@ func NewDriver() (*Driver, error) {
   return &Driver{cli: cli}, nil
 }
 
-func (d *Driver) Check(ctx context.Context, step *ktl.Step) error {
+func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) error {
   taskdat := taskData{}
-  err := mapstructure.Decode(step.Logs, &taskdat)
+  err := mapstructure.Decode(spec.Logs, &taskdat)
   if err != nil {
     return fmt.Errorf("decoding task data: %s", err)
   }
@@ -42,24 +42,24 @@ func (d *Driver) Check(ctx context.Context, step *ktl.Step) error {
 
   switch task.State {
   case tes.Complete:
-    step.State = ktl.Success
+    spec.State = ktl.Success
   case tes.SystemError:
-    step.State = ktl.Failed
-    step.Reason = "task system error"
+    spec.State = ktl.Failed
+    spec.Reason = "task system error"
   case tes.ExecutorError:
-    step.State = ktl.Failed
-    step.Reason = "task executor error"
+    spec.State = ktl.Failed
+    spec.Reason = "task executor error"
   case tes.Canceled:
-    step.State = ktl.Failed
-    step.Reason = "task canceled"
+    spec.State = ktl.Failed
+    spec.Reason = "task canceled"
   }
   return nil
 }
 
-func (d *Driver) Start(ctx context.Context, step *ktl.Step) error {
+func (d *Driver) Start(ctx context.Context, spec *ktl.DriverSpec) error {
 
   task := &tes.Task{}
-  err := mapstructure.Decode(step.Config, task)
+  err := mapstructure.Decode(spec.Config, task)
   if err != nil {
     return fmt.Errorf("decoding task config: %s", err)
   }
@@ -69,14 +69,14 @@ func (d *Driver) Start(ctx context.Context, step *ktl.Step) error {
     return fmt.Errorf("creating task: %s", err)
   }
 
-  startTime := time.Now()
-  step.State = ktl.Running
-  step.StartedAt = &startTime
-  step.Logs = taskData{ID: resp.Id}
+  //startTime := time.Now()
+  //spec.State = ktl.Active
+  //step.StartedAt = &startTime
+  spec.Logs = taskData{ID: resp.Id}
   return nil
 }
 
-func (d *Driver) Stop(ctx context.Context, step *ktl.Step) error {
+func (d *Driver) Stop(ctx context.Context, step ktl.Step) error {
   taskdat := taskData{}
   err := mapstructure.Decode(step.Logs, &taskdat)
   if err != nil {

@@ -20,13 +20,6 @@ actions
 
 step exec history
 
-state reconciler
-- need something that is tolerant to errors occurring while driving steps
-  e.g. if driver.Stop() fails, a system should be able to revisit this
-  steps and try again. also, provides an easy way for users to modify
-  the desired state of the steps. also, possibly allows drivers to
-  exist as clients.
-
 tasks:
 - retries
 - manual restart
@@ -34,11 +27,10 @@ tasks:
 
 configuration and cli/env
 
-paused state
-
 dashboard
 
 step types:
+- task which is able to retry, gradually requesting more resources
 - add existing tasks, without creation
 - wait for github PR to be merged.
 - task array
@@ -49,7 +41,7 @@ step types:
 - wait for task
 - task that waits for input files
 -- after a task has finished, if the file disappears, how can ktl convey this usefully?
-   
+
 - wait for event
 -- what happens when the event comes in twice? and the last is still running?
    map to separate tasks? restart?
@@ -83,10 +75,8 @@ type Batch struct {
 	Mode  Mode    `json:"mode"`
 
 	// Status
-	State  State       `json:"state"`
-	Reason string      `json:"reason,omitempty"`
-	Logs   interface{} `json:"logs,omitempty"`
-	Counts dag.Counts  `json:"counts"`
+	State  State      `json:"state"`
+	Counts dag.Counts `json:"counts"`
 }
 
 // Step describes a unit of work in a Batch. There are many types of steps:
@@ -98,9 +88,6 @@ type Step struct {
 	Type string `json:"type"`
 	// Dependencies lists the IDs of the steps this step depends on.
 	Dependencies []string `json:"dependencies,omitempty"`
-	// Config contains opaque, driver-specific data which each type of step
-	// driver uses to define the details of the step.
-	Config interface{} `json:"config,omitempty"`
 
 	// Timeout is used to require the a step finish within a given time frame,
 	// starting when step is started.
@@ -109,26 +96,33 @@ type Step struct {
 	Deadline *time.Time `json:"deadline,omitempty"`
 
 	State State `json:"state"`
-	// Reason describes why the step failed.
+	// Reason describes why the step is in its state,
+	// usually it describes an error message.
 	Reason    string     `json:"reason,omitempty"`
 	StartedAt *time.Time `json:"startedAt,omitempty"`
+	// Events records events such as start/stop, which occur during state changes.
+	// Events are processed (usually asynchronously) by step drivers.
+	Events []Event `json:"events"`
+
+	// Config contains opaque, driver-specific data which each type of step
+	// driver uses to define the details of the step.
+	Config interface{} `json:"config,omitempty"`
 	// Logs holds opaque, driver-specific log data.
 	Logs interface{} `json:"logs,omitempty"`
 }
 
-// Done returns true if the step is in a final state: success or failed.
-func (s *Step) Done() bool {
-	return s.State == Success || s.State == Failed
+// DAGNodeState returns state information used by the dag library.
+func (s *Step) DAGNodeState() dag.State {
+	return dag.State{
+		Done:   s.State.Done(),
+		Paused: s.State == Paused,
+		Active: s.State == Active,
+		Failed: s.State == Failed,
+	}
 }
 
-// Running returns true if the step state is Running.
-// Mostly exists to fulfill dag.Node interface.
-func (s *Step) Running() bool {
-	return s.State == Running
-}
-
-// Error returns an error with Step.Reason if the step state is Failed,
-// otherwise Error returns nil.
+// Error returns an error if the step failed, with step.Reason
+// as the message, otherwise it returns nil.
 func (s *Step) Error() error {
 	if s.State == Failed {
 		return fmt.Errorf(s.Reason)
