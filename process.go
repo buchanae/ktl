@@ -266,21 +266,24 @@ func processBatch(ctx context.Context, batch *Batch) {
 		return
 	}
 
+	ready := dag.Ready(d, all)
+  active := dag.FilterByState(all, dag.Active)
   terminals := dag.Terminals(d, all)
+  blockers := dag.Blockers(d, terminals)
 
-  // If all terminal steps are blocked, nothing can be done.
-  if dag.AllBlocked(d, terminals) {
-    blockers := dag.Blockers(d, terminals)
-    if dag.AllState(blockers, dag.Failed) {
-      // All the remaining steps are blocked by failed nodes.
-      // Consider the batch failed.
-      batch.State = Failed
-      return
-    }
+  // If all terminal steps are blocked, and nothing is running, and nothing is ready,
+  // there's nothing to do. If all the remaining steps are blocked, we consider
+  // the batch as failed.
+  if active == nil && ready == nil && dag.AllBlocked(d, terminals) &&
+     dag.AllState(blockers, dag.Failed) {
+
+    // All the remaining steps are blocked by failed nodes.
+    // Consider the batch failed.
+    batch.State = Failed
+    return
   }
 
 	// Execute next steps.
-	ready := dag.Ready(d, all)
 	for _, node := range ready {
 		step := node.(*Step)
 		step.State = Active

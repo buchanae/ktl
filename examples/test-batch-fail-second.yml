@@ -1,0 +1,25 @@
+steps:
+- id: task-1
+  type: Task
+  config:
+    executors:
+    - image: alpine
+      command: ["exit", "1"]
+
+- id: task-2
+  type: Task
+  config:
+    executors:
+    - image: alpine
+      command: ["sleep", "5"]
+
+- id: task-3
+  type: Task
+  config:
+    executors:
+    - image: alpine
+      command: ["sleep", "10"]
+  dependencies:
+  - task-1
+  - task-2
+  timeout: 5s
