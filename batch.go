@@ -102,7 +102,7 @@ type Step struct {
 	StartedAt *time.Time `json:"startedAt,omitempty"`
 	// Events records events such as start/stop, which occur during state changes.
 	// Events are processed (usually asynchronously) by step drivers.
-	Events []Event `json:"events"`
+	Events []*Event `json:"events"`
 
 	// Config contains opaque, driver-specific data which each type of step
 	// driver uses to define the details of the step.

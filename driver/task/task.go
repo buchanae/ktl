@@ -3,7 +3,6 @@ package task
 import (
   "fmt"
   "context"
-  "time"
 	"github.com/ohsu-comp-bio/tes"
 	"github.com/ohsu-comp-bio/ktl"
 	"github.com/mitchellh/mapstructure"
@@ -21,15 +20,15 @@ func NewDriver() (*Driver, error) {
   return &Driver{cli: cli}, nil
 }
 
-func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) error {
+func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) (*ktl.CheckResult, error) {
   taskdat := taskData{}
   err := mapstructure.Decode(spec.Logs, &taskdat)
   if err != nil {
-    return fmt.Errorf("decoding task data: %s", err)
+    return nil, fmt.Errorf("decoding task data: %s", err)
   }
 
   if taskdat.ID == "" {
-    return nil
+    return nil, nil
   }
 
   task, err := d.cli.GetTask(ctx, &tes.GetTaskRequest{
@@ -37,23 +36,20 @@ func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) error {
     View: tes.Minimal,
   })
   if err != nil {
-    return fmt.Errorf("getting task: %s", err)
+    return nil, fmt.Errorf("getting task: %s", err)
   }
 
   switch task.State {
   case tes.Complete:
-    spec.State = ktl.Success
+    return &ktl.CheckResult{State: ktl.Success}, nil
   case tes.SystemError:
-    spec.State = ktl.Failed
-    spec.Reason = "task system error"
+    return &ktl.CheckResult{State: ktl.Failed, Reason: "task system error"}, nil
   case tes.ExecutorError:
-    spec.State = ktl.Failed
-    spec.Reason = "task executor error"
+    return &ktl.CheckResult{State: ktl.Failed, Reason: "task executor error"}, nil
   case tes.Canceled:
-    spec.State = ktl.Failed
-    spec.Reason = "task canceled"
+    return &ktl.CheckResult{State: ktl.Failed, Reason: "task canceled"}, nil
   }
-  return nil
+  return nil, nil
 }
 
 func (d *Driver) Start(ctx context.Context, spec *ktl.DriverSpec) error {
@@ -76,9 +72,9 @@ func (d *Driver) Start(ctx context.Context, spec *ktl.DriverSpec) error {
   return nil
 }
 
-func (d *Driver) Stop(ctx context.Context, step ktl.Step) error {
+func (d *Driver) Stop(ctx context.Context, spec *ktl.DriverSpec) error {
   taskdat := taskData{}
-  err := mapstructure.Decode(step.Logs, &taskdat)
+  err := mapstructure.Decode(spec.Logs, &taskdat)
   if err != nil {
     return fmt.Errorf("decoding task data: %s", err)
   }
