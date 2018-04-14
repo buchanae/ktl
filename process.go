@@ -88,7 +88,7 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 
       // Get all active batches
       batches, err := db.ListBatches(ctx, &BatchListOptions{
-        State: []State{Waiting, Ready, Active},
+        State: []State{Waiting, Active},
       })
       if err != nil {
         log.Println("error listing batches", err)
@@ -173,6 +173,8 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 func checkSteps(ctx context.Context, batch *Batch, drivers map[string]Driver) error {
   // Check step state via driver.
   for _, step := range batch.Steps {
+    // TODO only check steps that aren't finished.
+
     driver, ok := drivers[step.Type]
     if !ok {
       log.Println("unknown step driver type: %s", step.Type)
@@ -236,9 +238,10 @@ func processBatch(ctx context.Context, batch *Batch) {
 		}
 	}
 
-	// TODO check how this behaves with blocked nodes.
 	d := BatchDAG(batch)
-	if dag.AllDone(d.AllNodes()) {
+  all := d.AllNodes()
+
+	if dag.AllDone(all) {
 		if failed != nil {
 			batch.State = Failed
 		} else {
@@ -263,11 +266,24 @@ func processBatch(ctx context.Context, batch *Batch) {
 		return
 	}
 
+  terminals := dag.Terminals(d, all)
+
+  // If all terminal steps are blocked, nothing can be done.
+  if dag.AllBlocked(d, terminals) {
+    blockers := dag.Blockers(d, terminals)
+    if dag.AllState(blockers, dag.Failed) {
+      // All the remaining steps are blocked by failed nodes.
+      // Consider the batch failed.
+      batch.State = Failed
+      return
+    }
+  }
+
 	// Execute next steps.
-	ready := dag.Ready(d, d.AllNodes())
+	ready := dag.Ready(d, all)
 	for _, node := range ready {
 		step := node.(*Step)
-		step.State = Ready
+		step.State = Active
 		step.Events = append(step.Events, NewEvent(Start))
 	}
 }

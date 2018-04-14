@@ -22,7 +22,7 @@ misc:
 */
 
 type Node interface {
-	DAGNodeState() State
+	NodeState() State
 }
 
 type DAG struct {

@@ -53,7 +53,7 @@ func (i Mode) MarshalText() ([]byte, error) {
 	return []byte(i.String()), nil
 }
 
-// MarshalText implements the encoding.TextUnmarshaler interface for Mode
+// UnmarshalText implements the encoding.TextUnmarshaler interface for Mode
 func (i *Mode) UnmarshalText(text []byte) error {
 	var err error
 	*i, err = ModeString(string(text))

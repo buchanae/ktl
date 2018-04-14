@@ -112,13 +112,20 @@ type Step struct {
 }
 
 // DAGNodeState returns state information used by the dag library.
-func (s *Step) DAGNodeState() dag.State {
-	return dag.State{
-		Done:   s.State.Done(),
-		Paused: s.State == Paused,
-		Active: s.State == Active,
-		Failed: s.State == Failed,
-	}
+func (s *Step) NodeState() dag.State {
+  switch s.State {
+  case Waiting:
+    return dag.Waiting
+  case Success:
+    return dag.Success
+  case Paused:
+    return dag.Paused
+  case Active:
+    return dag.Active
+  case Failed:
+    return dag.Failed
+  }
+  return dag.Paused
 }
 
 // Error returns an error if the step failed, with step.Reason
