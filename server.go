@@ -29,9 +29,15 @@ var ErrNotFound = fmt.Errorf("not found")
 // Serve runs a HTTP server, serving the ktl REST API.
 func Serve(db Database) error {
 	s := newServer(db)
+  ui := newUI()
+	http.Handle("/ui/", http.StripPrefix("/ui", ui))
 	http.Handle("/v0/", http.StripPrefix("/v0", s))
 	log.Println("Listening on", DefaultListen)
 	return http.ListenAndServe(DefaultListen, nil)
+}
+
+func newUI() http.Handler {
+  return http.FileServer(http.Dir("ui"))
 }
 
 // server provides REST API endpoint handling.
