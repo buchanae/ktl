@@ -35,6 +35,11 @@ func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) (*ktl.CheckRes
     Id:   taskdat.ID,
     View: tes.Minimal,
   })
+  if err == tes.ErrNotFound {
+    // TODO "unknown" would be more descriptive
+    // TODO would be good to clear the task ID from the step logs?
+    return &ktl.CheckResult{State: ktl.Waiting, Reason: "task not found"}, nil
+  }
   if err != nil {
     return nil, fmt.Errorf("getting task: %s", err)
   }

@@ -65,6 +65,11 @@ func newServer(db Database) *server {
 		Name("GetBatch").
 		HandlerFunc(s.getBatch)
 
+  r.Path("/batch/{batchID}/step/{stepID}:restart").
+    Methods("POST").
+    Name("RestartStep").
+    HandlerFunc(s.restartStep)
+
 	s.router = r
 	return s
 }
@@ -159,4 +164,20 @@ func (s *server) getBatch(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+}
+
+func (s *server) restartStep(w http.ResponseWriter, req *http.Request) {
+  vars := mux.Vars(req)
+  batchID := vars["batchID"]
+  stepID := vars["stepID"]
+  err := RestartStep(req.Context(), s.db, batchID, stepID)
+  if err == ErrNotFound {
+		http.Error(w, "batch not found", http.StatusNotFound)
+		return
+  }
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error restarting step: %s", err), http.StatusInternalServerError)
+		return
+	}
+  return
 }

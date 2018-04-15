@@ -8,47 +8,6 @@ import (
 	"time"
 )
 
-const (
-	Start EventType = iota
-	Stop
-)
-
-// EventType enumerates the types of events available.
-type EventType int
-
-//go:generate enumer -type=EventType -text
-
-// TODO configurable. exp backoff. Max attempt time?
-//      how long is long enough? how many attempts is enough? what if the service
-//      comes back online after a weekend? total time is maybe a better metric
-//      with a max time of ~1week
-const MaxAttempts = 20
-
-// Event describes an event occurring during the lifetime of a step,
-// usually due to a state change, such as "start" or "stop".
-// Events are used while processing step drivers.
-type Event struct {
-	Type      EventType `json:"type"`
-	CreatedAt time.Time `json:"createdAt"`
-	// Processed is set to true when the event has been successfully
-	// processed by the step driver.
-	Processed bool `json:"processed"`
-	// Attempts records the number of times event processing has been
-	// attempted. The batch processor may decide to give up if the
-	// event has been attempted too many times.
-	Attempts int `json:"attempts"`
-}
-
-func ShouldProcess(e *Event) bool {
-  return !e.Processed && e.Attempts < MaxAttempts
-}
-
-// NewEvent creates a new event of the given type, with the timestamp
-// set to now.
-func NewEvent(t EventType) *Event {
-	return &Event{Type: t, CreatedAt: time.Now()}
-}
-
 // DriverSpec is used to pass limited step information to drivers,
 // so it's more clear what information a driver is expected to access/modify.
 type DriverSpec struct {
@@ -97,14 +56,19 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 
       // For each batch, reconcile any state changes.
       for _, batch := range batches {
-        err := checkSteps(ctx, batch, drivers)
-        if err != nil {
-          log.Println("error checking steps:", err)
-          continue
+
+        // Check step state via driver.
+        for _, step := range batch.Steps {
+          // TODO only check steps that aren't finished.
+          err := checkStep(ctx, batch.ID, step, drivers)
+          if err != nil {
+            log.Println("error checking step:", err)
+          }
         }
 
         processBatch(ctx, batch)
 
+        // TODO concurrency checks
         err = db.UpdateBatch(ctx, batch)
         if err != nil {
           log.Println("error updating batch state:", err)
@@ -112,54 +76,13 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
         }
 
         for _, step := range batch.Steps {
-          driver, ok := drivers[step.Type]
-          if !ok {
-            log.Println("unknown step driver type: %s", step.Type)
-            continue
-          }
-
-          for _, event := range step.Events {
-            // TODO an event could get stuck, but perhaps a user/admin knows the event
-            //      should be forced to dropped in order to fix the stuck step.
-            //      want a way to delete an event.
-            if !ShouldProcess(event) {
-              break
-            }
-            event.Attempts++
-
-            spec := &DriverSpec{
-              BatchID: batch.ID,
-              StepID: step.ID,
-              Config: step.Config,
-              Logs: step.Logs,
-            }
-
-            var err error
-            switch event.Type {
-
-            case Start:
-              err = driver.Start(ctx, spec)
-              if err != nil {
-                log.Println("driver.Start failed", err)
-              }
-
-            case Stop:
-              err = driver.Stop(ctx, spec)
-              if err != nil {
-                log.Println("driver.Stop failed", err)
-              }
-            }
-
-            if err != nil {
-              break
-            }
-
-            event.Processed = true
-            step.Config = spec.Config
-            step.Logs = spec.Logs
+          err := processEvents(ctx, batch.ID, step, drivers)
+          if err != nil {
+            log.Println(err)
           }
         }
 
+        // TODO concurrency checks
         err = db.UpdateBatch(ctx, batch)
         if err != nil {
           log.Println("error updating batch state after driving:", err)
@@ -170,31 +93,65 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
   }
 }
 
-func checkSteps(ctx context.Context, batch *Batch, drivers map[string]Driver) error {
-  // Check step state via driver.
-  for _, step := range batch.Steps {
-    // TODO only check steps that aren't finished.
+func processEvents(ctx context.Context, batchID string, step *Step, drivers map[string]Driver) error {
+  driver, ok := drivers[step.Type]
+  if !ok {
+    return fmt.Errorf("unknown step driver type: %s", step.Type)
+  }
 
-    driver, ok := drivers[step.Type]
-    if !ok {
-      log.Println("unknown step driver type: %s", step.Type)
+  for _, event := range step.Events {
+    if event.Processed {
       continue
     }
 
     spec := &DriverSpec{
-      BatchID: batch.ID,
+      BatchID: batchID,
       StepID: step.ID,
       Config: step.Config,
       Logs: step.Logs,
     }
-    res, err := driver.Check(ctx, spec)
-    if err != nil {
-      return fmt.Errorf("checking step %s: %s", step.ID, err)
+
+    switch event.Type {
+    case Start:
+      err := driver.Start(ctx, spec)
+      if err != nil {
+        return fmt.Errorf("driver.Start failed", err)
+      }
+
+    case Stop:
+      err := driver.Stop(ctx, spec)
+      if err != nil {
+        return fmt.Errorf("driver.Stop failed", err)
+      }
     }
-    if res != nil {
-      step.State = res.State
-      step.Reason = res.Reason
-    }
+
+    event.Processed = true
+    step.Config = spec.Config
+    step.Logs = spec.Logs
+  }
+  return nil
+}
+
+func checkStep(ctx context.Context, batchID string, step *Step, drivers map[string]Driver) error {
+
+  driver, ok := drivers[step.Type]
+  if !ok {
+    return fmt.Errorf("unknown step driver type: %s", step.Type)
+  }
+
+  spec := &DriverSpec{
+    BatchID: batchID,
+    StepID: step.ID,
+    Config: step.Config,
+    Logs: step.Logs,
+  }
+  res, err := driver.Check(ctx, spec)
+  if err != nil {
+    return fmt.Errorf("checking step %s: %s", step.ID, err)
+  }
+  if res != nil {
+    step.State = res.State
+    step.Reason = res.Reason
   }
   return nil
 }
@@ -289,4 +246,30 @@ func processBatch(ctx context.Context, batch *Batch) {
 		step.State = Active
 		step.Events = append(step.Events, NewEvent(Start))
 	}
+}
+
+func RestartStep(ctx context.Context, db Database, batchID, stepID string) error {
+  batch, err := db.GetBatch(ctx, batchID)
+  if err != nil {
+    return fmt.Errorf("getting batch: %s", err)
+  }
+
+  for _, step := range batch.Steps {
+    if step.ID == stepID {
+      step.State = Waiting
+      step.Events = append(step.Events, NewEvent(Stop))
+      step.Events = append(step.Events, NewEvent(Start))
+
+      if batch.State.Done() {
+        batch.State = Waiting
+      }
+
+      err := db.UpdateBatch(ctx, batch)
+      if err != nil {
+        return fmt.Errorf("updating batch: %s", err)
+      }
+      return nil
+    }
+  }
+  return ErrNotFound
 }
