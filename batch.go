@@ -74,8 +74,6 @@ type Batch struct {
 	Steps []*Step `json:"steps"`
 	Mode  Mode    `json:"mode"`
 
-	// Status
-	State  State      `json:"state"`
 	Counts dag.Counts `json:"counts"`
 }
 
@@ -100,32 +98,13 @@ type Step struct {
 	// usually it describes an error message.
 	Reason    string     `json:"reason,omitempty"`
 	StartedAt *time.Time `json:"startedAt,omitempty"`
-	// Events records events such as start/stop, which occur during state changes.
-	// Events are processed (usually asynchronously) by step drivers.
-	Events []*Event `json:"events"`
+	Version   int        `json:"version"`
 
 	// Config contains opaque, driver-specific data which each type of step
 	// driver uses to define the details of the step.
 	Config interface{} `json:"config,omitempty"`
 	// Logs holds opaque, driver-specific log data.
 	Logs interface{} `json:"logs,omitempty"`
-}
-
-// DAGNodeState returns state information used by the dag library.
-func (s *Step) NodeState() dag.State {
-  switch s.State {
-  case Waiting:
-    return dag.Waiting
-  case Success:
-    return dag.Success
-  case Paused:
-    return dag.Paused
-  case Active:
-    return dag.Active
-  case Failed:
-    return dag.Failed
-  }
-  return dag.Paused
 }
 
 // Error returns an error if the step failed, with step.Reason
@@ -151,7 +130,6 @@ type CreateBatchResponse struct {
 // BatchListOptions describes filters and pagination options used while
 // querying for a list of batches.
 type BatchListOptions struct {
-	State    []State           `json:"state"`
 	Tags     map[string]string `json:"tags"`
 	Page     string            `json:"page"`
 	PageSize int               `json:"pageSize"`
@@ -173,25 +151,4 @@ func (b *BatchListOptions) GetPageSize() int {
 type BatchList struct {
 	Batches  []*Batch `json:"batches"`
 	NextPage string   `json:"nextPage"`
-}
-
-// BatchDAG builds a new DAG datastructure from the given batch's steps.
-func BatchDAG(batch *Batch) *dag.DAG {
-	d := dag.NewDAG()
-	for _, step := range batch.Steps {
-		d.AddNode(step.ID, step)
-	}
-
-	for _, step := range batch.Steps {
-		for _, dep := range step.Dependencies {
-			d.AddDep(step.ID, dep)
-		}
-	}
-	return d
-}
-
-// UpdateBatchCounts modifies the given batch, updating the Batch.Counts field.
-func UpdateBatchCounts(batch *Batch) {
-	d := BatchDAG(batch)
-	batch.Counts = dag.Count(d, d.AllNodes())
 }

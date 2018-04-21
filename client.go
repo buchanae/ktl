@@ -80,12 +80,12 @@ func (c *Client) GetBatch(ctx context.Context, id string) (*Batch, error) {
 }
 
 func (c *Client) RestartStep(ctx context.Context, batchID, stepID string) error {
-  u := c.Address + "/v0/batch/" + batchID +"/step/"+ stepID +":restart"
+	u := c.Address + "/v0/batch/" + batchID + "/step/" + stepID + ":restart"
 	req, err := http.NewRequest("POST", u, nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %s", err)
 	}
-  return c.do(ctx, req, nil)
+	return c.do(ctx, req, nil)
 }
 
 // do helps execute requests and deal with http responses; it checks for errors,

@@ -1,7 +1,7 @@
 package ktl
 
 import (
-  "time"
+	"time"
 )
 
 const (

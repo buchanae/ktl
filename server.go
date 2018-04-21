@@ -29,7 +29,7 @@ var ErrNotFound = fmt.Errorf("not found")
 // Serve runs a HTTP server, serving the ktl REST API.
 func Serve(db Database) error {
 	s := newServer(db)
-  ui := newUI()
+	ui := newUI()
 	http.Handle("/ui/", http.StripPrefix("/ui", ui))
 	http.Handle("/v0/", http.StripPrefix("/v0", s))
 	log.Println("Listening on", DefaultListen)
@@ -37,7 +37,7 @@ func Serve(db Database) error {
 }
 
 func newUI() http.Handler {
-  return http.FileServer(http.Dir("ui"))
+	return http.FileServer(http.Dir("ui"))
 }
 
 // server provides REST API endpoint handling.
@@ -65,10 +65,10 @@ func newServer(db Database) *server {
 		Name("GetBatch").
 		HandlerFunc(s.getBatch)
 
-  r.Path("/batch/{batchID}/step/{stepID}:restart").
-    Methods("POST").
-    Name("RestartStep").
-    HandlerFunc(s.restartStep)
+	r.Path("/batch/{batchID}/step/{stepID}:restart").
+		Methods("POST").
+		Name("RestartStep").
+		HandlerFunc(s.restartStep)
 
 	s.router = r
 	return s
@@ -102,7 +102,6 @@ func (s *server) createBatch(w http.ResponseWriter, req *http.Request) {
 
 	batch.ID = NewBatchID()
 	batch.CreatedAt = time.Now()
-	UpdateBatchCounts(batch)
 
 	err = s.db.CreateBatch(req.Context(), batch)
 	if err != nil {
@@ -167,17 +166,17 @@ func (s *server) getBatch(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *server) restartStep(w http.ResponseWriter, req *http.Request) {
-  vars := mux.Vars(req)
-  batchID := vars["batchID"]
-  stepID := vars["stepID"]
-  err := RestartStep(req.Context(), s.db, batchID, stepID)
-  if err == ErrNotFound {
+	vars := mux.Vars(req)
+	batchID := vars["batchID"]
+	stepID := vars["stepID"]
+	err := RestartStep(req.Context(), s.db, batchID, stepID)
+	if err == ErrNotFound {
 		http.Error(w, "batch not found", http.StatusNotFound)
 		return
-  }
+	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error restarting step: %s", err), http.StatusInternalServerError)
 		return
 	}
-  return
+	return
 }

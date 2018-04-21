@@ -36,10 +36,6 @@ func (db *MongoDB) ListBatches(ctx context.Context, opts *ktl.BatchListOptions) 
 		query["id"] = bson.M{"$lt": opts.Page}
 	}
 
-  if opts.State != nil {
-    query["state"] = bson.M{"$in": opts.State}
-  }
-
 	for k, v := range opts.Tags {
 		query[fmt.Sprintf("tags.%s", k)] = bson.M{"$eq": v}
 	}
