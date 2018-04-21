@@ -21,7 +21,6 @@ step exec history
 
 tasks:
 - retries
-- manual restart
 - canned tasks: run notebook, etc.
 
 configuration and cli/env
@@ -74,7 +73,6 @@ type Batch struct {
 	Mode  Mode    `json:"mode"`
 
 	//Counts dag.Counts `json:"counts"`
-	History []*Step `json:"-"`
 }
 
 // Step describes a unit of work in a Batch. There are many types of steps:
@@ -105,6 +103,9 @@ type Step struct {
 	Config interface{} `json:"config,omitempty"`
 	// Logs holds opaque, driver-specific log data.
 	Logs interface{} `json:"logs,omitempty"`
+
+	actual  *CheckResult
+	History []*Step `json:"-"`
 }
 
 // Error returns an error if the step failed, with step.Reason

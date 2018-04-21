@@ -42,7 +42,6 @@ func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) (*ktl.CheckRes
 		return &ktl.CheckResult{
 			State:   ktl.Waiting,
 			Reason:  "task not found",
-			Version: taskdat.Version,
 		}, nil
 	}
 	if err != nil {
@@ -53,34 +52,29 @@ func (d *Driver) Check(ctx context.Context, spec *ktl.DriverSpec) (*ktl.CheckRes
 	case tes.Complete:
 		return &ktl.CheckResult{
 			State:   ktl.Success,
-			Version: taskdat.Version,
 		}, nil
 
 	case tes.SystemError:
 		return &ktl.CheckResult{
 			State:   ktl.Failed,
 			Reason:  "task system error",
-			Version: taskdat.Version,
 		}, nil
 
 	case tes.ExecutorError:
 		return &ktl.CheckResult{
 			State:   ktl.Failed,
 			Reason:  "task executor error",
-			Version: taskdat.Version,
 		}, nil
 
 	case tes.Canceled:
 		return &ktl.CheckResult{
 			State:   ktl.Failed,
 			Reason:  "task canceled",
-			Version: taskdat.Version,
 		}, nil
 
 	case tes.Queued, tes.Paused, tes.Initializing, tes.Running:
 		return &ktl.CheckResult{
 			State:   ktl.Active,
-			Version: taskdat.Version,
 		}, nil
 	}
 	return nil, nil
@@ -99,7 +93,7 @@ func (d *Driver) Start(ctx context.Context, spec *ktl.DriverSpec) error {
 		return fmt.Errorf("creating task: %s", err)
 	}
 
-	spec.Logs = taskData{ID: resp.Id, Version: spec.Version}
+	spec.Logs = taskData{ID: resp.Id}
 	return nil
 }
 
@@ -123,5 +117,4 @@ func (d *Driver) Stop(ctx context.Context, spec *ktl.DriverSpec) error {
 
 type taskData struct {
 	ID      string
-	Version int
 }

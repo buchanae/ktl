@@ -3,7 +3,6 @@ package ktl
 import (
 	"context"
 	"fmt"
-	"github.com/ohsu-comp-bio/ktl/dag"
 	"log"
 	"time"
 )
@@ -11,17 +10,13 @@ import (
 // DriverSpec is used to pass limited step information to drivers,
 // so it's more clear what information a driver is expected to access/modify.
 type DriverSpec struct {
-	BatchID string
-	StepID  string
-	Version int
-	Config  interface{}
-	Logs    interface{}
+	Config interface{}
+	Logs   interface{}
 }
 
 type CheckResult struct {
-	State   State
-	Reason  string
-	Version int
+	State  State
+	Reason string
 }
 
 // Driver is the interface fulfilled by a step driver.
@@ -42,143 +37,99 @@ func NewProcessor(db Database, drivers map[string]Driver) *Processor {
 	return &Processor{db: db, drivers: drivers}
 }
 
-func (p *Processor) newCtrl(ctx context.Context, batch *Batch, step *Step) (*stepCtrl, error) {
-	driver, ok := p.drivers[step.Type]
-	if !ok {
-		return nil, fmt.Errorf("unknown step driver type: %s", step.Type)
-	}
-
-	ctrl := &stepCtrl{
-		Batch:  batch,
-		Step:   step,
-		Driver: driver,
-	}
-
-	// Check step state via driver.
-	err := ctrl.checkActual(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("checking step:", err)
-	}
-	return ctrl, nil
-}
-
 // Process is the main control loop, responsible for managing the state
 // of batches and their steps. Process periodically checks for active batches
 // and calls the step drivers to manage step state.
-func (p *Processor) Process(ctx context.Context) {
-	// TODO configurable
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+func (p *Processor) Process(ctx context.Context) error {
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+	// Get all active batches
+	// TODO pagination
+	// TODO separate batch list from main control code below
+	batches, err := p.db.ListBatches(ctx, &BatchListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing batches: %s", err)
+	}
 
-			// Get all active batches
-			// TODO pagination
-			batches, err := p.db.ListBatches(ctx, &BatchListOptions{})
+	// For each batch, reconcile any state changes.
+	for _, batch := range batches {
+
+		for _, step := range batch.Steps {
+			err := p.checkActual(ctx, step)
 			if err != nil {
-				log.Println("error listing batches", err)
+				log.Println("error checking step:", err)
 				continue
 			}
 
-			// For each batch, reconcile any state changes.
-			for _, batch := range batches {
-
-				var ctrls []*stepCtrl
-				for _, step := range batch.Steps {
-					ctrl, err := p.newCtrl(ctx, batch, step)
-					if err != nil {
-						// TODO want these errors in the database so they can be
-						//      reported in UIs
-						log.Println(err)
-						continue
-					}
-					ctrls = append(ctrls, ctrl)
-				}
-
-				// Stop old versions of tasks
-				for _, step := range batch.History {
-					ctrl, err := p.newCtrl(ctx, batch, step)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-					err = ctrl.checkActual(ctx)
-					if err != nil {
-						log.Println("error checking step:", err)
-						continue
-					}
-					if !ctrl.State.Done() {
-						ctrl.State = Failed
-					}
-					err = ctrl.reconcile(ctx)
-					if err != nil {
-						log.Println(err)
-					}
-				}
-
-				// Process the batch's DAG and update the step states.
-				// e.g. when a step's dependencies are ready, mark the step as active.
-				processDAG(ctx, ctrls, batch.Mode)
-
-				// TODO concurrency checks
-				err = p.db.UpdateBatch(ctx, batch)
+			// Stop old versions of steps
+			for _, old := range step.History {
+				err := p.checkActual(ctx, old)
 				if err != nil {
-					log.Println("error updating batch state:", err)
+					log.Println("error checking step:", err)
 					continue
 				}
-
-				// Reconcile the state of the steps with the driver entities
-				// e.g. start/stop a task
-				for _, ctrl := range ctrls {
-					err := ctrl.reconcile(ctx)
-					if err != nil {
-						log.Println(err)
-					}
+				if !old.State.Done() {
+					old.State = Failed
 				}
-
-				// TODO concurrency checks
-				err = p.db.UpdateBatch(ctx, batch)
+				err = p.reconcile(ctx, old)
 				if err != nil {
-					log.Println("error updating batch state after driving:", err)
-					continue
+					log.Println(err)
 				}
 			}
 		}
-	}
-}
 
-type stepCtrl struct {
-	*Step
-	Batch  *Batch
-	Driver Driver
-	Actual *CheckResult
-	Reason string
-}
+		// Process the batch's DAG and update the step states.
+		// e.g. when a step's dependencies are ready, mark the step as active.
+		processDAG(batch.Steps, batch.Mode)
 
-func (s *stepCtrl) checkActual(ctx context.Context) error {
+		// TODO concurrency checks
+		err = p.db.UpdateBatch(ctx, batch)
+		if err != nil {
+			log.Println("error updating batch state:", err)
+			continue
+		}
 
-	spec := &DriverSpec{
-		BatchID: s.Batch.ID,
-		StepID:  s.Step.ID,
-		Version: s.Step.Version,
-		Config:  s.Step.Config,
-		Logs:    s.Step.Logs,
+		// Reconcile the state of the steps with the driver entities
+		// e.g. start/stop a task
+		for _, step := range batch.Steps {
+			err := p.reconcile(ctx, step)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+
+		// TODO concurrency checks
+		err = p.db.UpdateBatch(ctx, batch)
+		if err != nil {
+			log.Println("error updating batch state after driving:", err)
+			continue
+		}
 	}
-	res, err := s.Driver.Check(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("checking step %s: %s", s.Step.ID, err)
-	}
-	s.Actual = res
-	// TODO this doesn't belong here in the long run.
-	s.processTimeLimits()
 	return nil
 }
 
-func (s *stepCtrl) processTimeLimits() {
+func (p *Processor) checkActual(ctx context.Context, step *Step) error {
+	driver, ok := p.drivers[step.Type]
+	if !ok {
+		return fmt.Errorf("unknown step driver type: %s", step.Type)
+	}
+
+	spec := &DriverSpec{
+		Config: step.Config,
+		Logs:   step.Logs,
+	}
+
+	res, err := driver.Check(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("checking step %s: %s", step.ID, err)
+	}
+
+	step.actual = res
+	// TODO this doesn't belong here in the long run.
+	p.processTimeLimits(step)
+	return nil
+}
+
+func (p *Processor) processTimeLimits(s *Step) {
 
 	// TODO while the process loop might happen often, it might not, and if it's slow
 	//      deadlines and timeouts might be imprecise. would be nice to have a system
@@ -200,74 +151,53 @@ func (s *stepCtrl) processTimeLimits() {
 	}
 }
 
-func (s *stepCtrl) reconcile(ctx context.Context) error {
-	if s.Actual == nil {
+func (p *Processor) reconcile(ctx context.Context, step *Step) error {
+	driver, ok := p.drivers[step.Type]
+	if !ok {
+		return fmt.Errorf("unknown step driver type: %s", step.Type)
+	}
+	if step.actual == nil {
 		return nil
 	}
-	actual := s.Actual.State
+	actual := step.actual.State
 
 	spec := &DriverSpec{
-		BatchID: s.Batch.ID,
-		StepID:  s.Step.ID,
-		Version: s.Step.Version,
-		Config:  s.Step.Config,
-		Logs:    s.Step.Logs,
+		Config: step.Config,
+		Logs:   step.Logs,
 	}
 
 	switch {
-	case s.State == Active && actual == Waiting:
-		err := s.Driver.Start(ctx, spec)
+	case step.State == Active && actual == Waiting:
+		err := driver.Start(ctx, spec)
 		if err != nil {
 			return err
 		}
-		s.Logs = spec.Logs
+		step.Logs = spec.Logs
 
-	case s.State == Failed && actual == Active:
-		err := s.Driver.Stop(ctx, spec)
+	case step.State == Failed && actual == Active:
+		err := driver.Stop(ctx, spec)
 		if err != nil {
 			return err
 		}
 
-	case s.State == Active && actual == Failed:
-		s.State = Failed
+	case step.State == Active && actual == Failed:
+		step.State = Failed
 
-	case s.State == Active && actual == Success:
-		s.State = Success
+	case step.State == Active && actual == Success:
+		step.State = Success
 	}
 
 	return nil
 }
 
-// NodeState returns state information used by the dag library.
-func (s *stepCtrl) NodeState() dag.State {
-	state := s.Step.State
-	if s.Actual.State.Done() {
-		state = s.Actual.State
-	}
-
-	switch state {
-	case Waiting:
-		return dag.Waiting
-	case Success:
-		return dag.Success
-	case Paused:
-		return dag.Paused
-	case Active:
-		return dag.Active
-	case Failed:
-		return dag.Failed
-	}
-	return dag.Paused
-}
-
 // processDAG processes the steps in a DAG, determining which steps are ready to run.
-func processDAG(ctx context.Context, steps []*stepCtrl, mode Mode) {
+func processDAG(steps []*Step, mode Mode) {
 
-	d := newDAG(steps)
-	all := d.AllNodes()
-	failed := dag.FilterByState(all, dag.Failed)
+	d := NewDAG(steps)
+	all := d.AllSteps()
+	failed := FilterByState(all, Failed)
 
-	if dag.AllDone(all) {
+	if AllDone(all) {
 		return
 	}
 
@@ -285,61 +215,21 @@ func processDAG(ctx context.Context, steps []*stepCtrl, mode Mode) {
 		return
 	}
 
-	ready := dag.Ready(d, all)
-	active := dag.FilterByState(all, dag.Active)
-	terminals := dag.Terminals(d, all)
-	blockers := dag.Blockers(d, terminals)
+	ready := Ready(d, all)
+	active := FilterByState(all, Active)
+	terminals := Terminals(d, all)
+	blockers := Blockers(d, terminals)
 
 	// If all terminal steps are blocked, and nothing is running, and nothing is ready,
 	// there's nothing to do. If all the remaining steps are blocked, we consider
 	// the batch as failed.
-	if active == nil && ready == nil && dag.AllBlocked(d, terminals) &&
-		dag.AllState(blockers, dag.Failed) {
+	if active == nil && ready == nil && AllBlocked(d, terminals) &&
+		AllState(blockers, Failed) {
 		return
 	}
 
 	// Execute next steps.
-	for _, node := range ready {
-		step := node.(*stepCtrl)
+	for _, step := range ready {
 		step.State = Active
 	}
-}
-
-func RestartStep(ctx context.Context, db Database, batchID, stepID string) error {
-	batch, err := db.GetBatch(ctx, batchID)
-	if err != nil {
-		return fmt.Errorf("getting batch: %s", err)
-	}
-
-	for _, step := range batch.Steps {
-		if step.ID == stepID {
-			copy := step
-			batch.History = append(batch.History, copy)
-			step.State = Waiting
-			step.Logs = nil
-			step.Version++
-
-			err := db.UpdateBatch(ctx, batch)
-			if err != nil {
-				return fmt.Errorf("updating batch: %s", err)
-			}
-			return nil
-		}
-	}
-	return ErrNotFound
-}
-
-// newDAG builds a new DAG datastructure from the given batch's steps.
-func newDAG(steps []*stepCtrl) *dag.DAG {
-	d := dag.NewDAG()
-	for _, step := range steps {
-		d.AddNode(step.Step.ID, step)
-	}
-
-	for _, step := range steps {
-		for _, dep := range step.Dependencies {
-			d.AddDep(step.ID, dep)
-		}
-	}
-	return d
 }

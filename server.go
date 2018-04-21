@@ -169,7 +169,10 @@ func (s *server) restartStep(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	batchID := vars["batchID"]
 	stepID := vars["stepID"]
-	err := RestartStep(req.Context(), s.db, batchID, stepID)
+	err := RestartStep(req.Context(), s.db, RestartStepOptions{
+		BatchID: batchID,
+		StepID:  stepID,
+	})
 	if err == ErrNotFound {
 		http.Error(w, "batch not found", http.StatusNotFound)
 		return

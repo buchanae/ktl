@@ -2,7 +2,9 @@ package main
 
 import (
   "context"
+  "log"
   "fmt"
+  "time"
   "github.com/ohsu-comp-bio/ktl"
   "github.com/ohsu-comp-bio/ktl/driver/task"
   "github.com/ohsu-comp-bio/ktl/database/mongodb"
@@ -31,10 +33,36 @@ func init() {
       }
 
       proc := ktl.NewProcessor(db, drivers)
-      go proc.Process(ctx)
+      go func() {
+        // TODO configurable
+        for range ticker(ctx, 2 * time.Second) {
+          err := proc.Process(ctx)
+          if err != nil {
+            log.Println("error: ", err)
+          }
+        }
+      }()
 
       return ktl.Serve(db)
     },
   }
   root.AddCommand(cmd)
+}
+
+func ticker(ctx context.Context, d time.Duration) <-chan time.Time {
+  out := make(chan time.Time)
+  go func() {
+    out <- time.Now()
+    ticker := time.NewTicker(d)
+    defer ticker.Stop()
+    for {
+      select {
+      case <-ctx.Done():
+        return
+      case t := <-ticker.C:
+        out <- t
+      }
+    }
+  }()
+  return out
 }
