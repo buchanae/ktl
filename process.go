@@ -33,10 +33,39 @@ type Driver interface {
 	Stop(context.Context, *DriverSpec) error
 }
 
+type Processor struct {
+	db      Database
+	drivers map[string]Driver
+}
+
+func NewProcessor(db Database, drivers map[string]Driver) *Processor {
+	return &Processor{db: db, drivers: drivers}
+}
+
+func (p *Processor) newCtrl(ctx context.Context, batch *Batch, step *Step) (*stepCtrl, error) {
+	driver, ok := p.drivers[step.Type]
+	if !ok {
+		return nil, fmt.Errorf("unknown step driver type: %s", step.Type)
+	}
+
+	ctrl := &stepCtrl{
+		Batch:  batch,
+		Step:   step,
+		Driver: driver,
+	}
+
+	// Check step state via driver.
+	err := ctrl.checkActual(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("checking step:", err)
+	}
+	return ctrl, nil
+}
+
 // Process is the main control loop, responsible for managing the state
 // of batches and their steps. Process periodically checks for active batches
 // and calls the step drivers to manage step state.
-func Process(ctx context.Context, db Database, drivers map[string]Driver) {
+func (p *Processor) Process(ctx context.Context) {
 	// TODO configurable
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -49,7 +78,7 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 
 			// Get all active batches
 			// TODO pagination
-			batches, err := db.ListBatches(ctx, &BatchListOptions{})
+			batches, err := p.db.ListBatches(ctx, &BatchListOptions{})
 			if err != nil {
 				log.Println("error listing batches", err)
 				continue
@@ -57,31 +86,38 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 
 			// For each batch, reconcile any state changes.
 			for _, batch := range batches {
+
 				var ctrls []*stepCtrl
 				for _, step := range batch.Steps {
-
-					driver, ok := drivers[step.Type]
-					if !ok {
+					ctrl, err := p.newCtrl(ctx, batch, step)
+					if err != nil {
 						// TODO want these errors in the database so they can be
 						//      reported in UIs
-						log.Println("unknown step driver type: %s", step.Type)
+						log.Println(err)
 						continue
 					}
-
-					ctrl := &stepCtrl{
-						Batch:  batch,
-						Step:   step,
-						Driver: driver,
-					}
 					ctrls = append(ctrls, ctrl)
+				}
 
-					// Check step state via driver.
-					err := ctrl.checkActual(ctx)
+				// Stop old versions of tasks
+				for _, step := range batch.History {
+					ctrl, err := p.newCtrl(ctx, batch, step)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+					err = ctrl.checkActual(ctx)
 					if err != nil {
 						log.Println("error checking step:", err)
+						continue
 					}
-
-					ctrl.processTimeLimits()
+					if !ctrl.State.Done() {
+						ctrl.State = Failed
+					}
+					err = ctrl.reconcile(ctx)
+					if err != nil {
+						log.Println(err)
+					}
 				}
 
 				// Process the batch's DAG and update the step states.
@@ -89,7 +125,7 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 				processDAG(ctx, ctrls, batch.Mode)
 
 				// TODO concurrency checks
-				err = db.UpdateBatch(ctx, batch)
+				err = p.db.UpdateBatch(ctx, batch)
 				if err != nil {
 					log.Println("error updating batch state:", err)
 					continue
@@ -105,7 +141,7 @@ func Process(ctx context.Context, db Database, drivers map[string]Driver) {
 				}
 
 				// TODO concurrency checks
-				err = db.UpdateBatch(ctx, batch)
+				err = p.db.UpdateBatch(ctx, batch)
 				if err != nil {
 					log.Println("error updating batch state after driving:", err)
 					continue
@@ -137,6 +173,8 @@ func (s *stepCtrl) checkActual(ctx context.Context) error {
 		return fmt.Errorf("checking step %s: %s", s.Step.ID, err)
 	}
 	s.Actual = res
+	// TODO this doesn't belong here in the long run.
+	s.processTimeLimits()
 	return nil
 }
 
@@ -175,8 +213,6 @@ func (s *stepCtrl) reconcile(ctx context.Context) error {
 		Config:  s.Step.Config,
 		Logs:    s.Step.Logs,
 	}
-
-	// TODO check for incremented version
 
 	switch {
 	case s.State == Active && actual == Waiting:
@@ -277,7 +313,10 @@ func RestartStep(ctx context.Context, db Database, batchID, stepID string) error
 
 	for _, step := range batch.Steps {
 		if step.ID == stepID {
+			copy := step
+			batch.History = append(batch.History, copy)
 			step.State = Waiting
+			step.Logs = nil
 			step.Version++
 
 			err := db.UpdateBatch(ctx, batch)

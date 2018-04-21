@@ -2,7 +2,6 @@ package ktl
 
 import (
 	"fmt"
-	"github.com/ohsu-comp-bio/ktl/dag"
 	"github.com/rs/xid"
 	"time"
 )
@@ -74,7 +73,8 @@ type Batch struct {
 	Steps []*Step `json:"steps"`
 	Mode  Mode    `json:"mode"`
 
-	Counts dag.Counts `json:"counts"`
+	//Counts dag.Counts `json:"counts"`
+	History []*Step `json:"-"`
 }
 
 // Step describes a unit of work in a Batch. There are many types of steps:

@@ -30,7 +30,8 @@ func init() {
         "Task": taskDriver,
       }
 
-      go ktl.Process(ctx, db, drivers)
+      proc := ktl.NewProcessor(db, drivers)
+      go proc.Process(ctx)
 
       return ktl.Serve(db)
     },
