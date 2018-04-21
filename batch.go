@@ -15,13 +15,18 @@ Batch editing/versioning
 actions
 - force invalidate step manually
 - modify step state (e.g. cancel/stop)
+-- "Failed" state doesn't nicely represent "Stopped/Canceled"
 - modify DAG
+- pause entire batch
+-- use case: plan to make a series of modifications to the batch. don't want things
+   starting in the middle of modification.
 
 step exec history
 
 tasks:
 - retries
 - canned tasks: run notebook, etc.
+- automatic task linking based on input/output
 
 configuration and cli/env
 
@@ -39,6 +44,8 @@ step types:
 - wait for task
 - task that waits for input files
 -- after a task has finished, if the file disappears, how can ktl convey this usefully?
+- how many of the above could just be tasks? a github poller could be a long-lived task
+  that doesn't exit until the PR is merged.
 
 - wait for event
 -- what happens when the event comes in twice? and the last is still running?
@@ -50,6 +57,15 @@ step types:
 - galaxy
 - cwl
 - can a step run multiple times?
+
+
+- demonstrate how a driver could be written as a separate service using a generic
+  http interface
+
+- building up an ad hoc workflow which can easily be snapshotted into something reusable
+-- tasks are often hard-coded with paths, so this would require some concept of a workspace,
+   into which all files are imported, in order to base all paths on relative root
+   but, a workspace is a really useful idea for lots of reasons.
 
 hard:
 - secret management

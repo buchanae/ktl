@@ -172,6 +172,8 @@ func (p *Processor) reconcile(ctx context.Context, step *Step) error {
 		if err != nil {
 			return err
 		}
+		now := time.Now()
+		step.StartedAt = &now
 		step.Logs = spec.Logs
 
 	case step.State == Failed && actual == Active:
