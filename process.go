@@ -169,11 +169,11 @@ func (s *stepCtrl) reconcile(ctx context.Context) error {
 	actual := s.Actual.State
 
 	spec := &DriverSpec{
-		BatchID: batchID,
-		StepID:  step.ID,
-		Version: step.Version,
-		Config:  step.Config,
-		Logs:    step.Logs,
+		BatchID: s.Batch.ID,
+		StepID:  s.Step.ID,
+		Version: s.Step.Version,
+		Config:  s.Step.Config,
+		Logs:    s.Step.Logs,
 	}
 
 	// TODO check for incremented version
@@ -184,6 +184,7 @@ func (s *stepCtrl) reconcile(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		s.Logs = spec.Logs
 
 	case s.State == Failed && actual == Active:
 		err := s.Driver.Stop(ctx, spec)
