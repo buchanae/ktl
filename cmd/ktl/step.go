@@ -3,7 +3,7 @@ package main
 import (
   "context"
   "github.com/spf13/cobra"
-  "github.com/ohsu-comp-bio/ktl"
+  "github.com/buchanae/ktl"
 )
 
 var stepCmd = &cobra.Command{
@@ -14,7 +14,7 @@ var restartStepCmd = &cobra.Command{
   Use: "restart <batch> <step>",
   Args: cobra.ExactArgs(2),
   RunE: func(cmd *cobra.Command, args []string) error {
-    cli := ktl.NewClient("http://"+ktl.DefaultListen)
+    cli := ktl.NewClient("http://"+ktl.DefaultServeOpts.Listen)
     ctx := context.Background()
     return cli.RestartStep(ctx, args[0], args[1])
   },

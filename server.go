@@ -11,8 +11,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// DefaultListen is host/port ktl will listen on by default.
-const DefaultListen = "localhost:8543"
+type ServeOpts struct {
+  // Listen is host/port ktl will listen on by default.
+  Listen string
+}
+
+var DefaultServeOpts = ServeOpts{
+  Listen: "localhost:8543",
+}
 
 // Database describes the interface implemented by database backends such as mongo,
 // providing access to storing and retrieving batches.
@@ -27,13 +33,13 @@ type Database interface {
 var ErrNotFound = fmt.Errorf("not found")
 
 // Serve runs a HTTP server, serving the ktl REST API.
-func Serve(db Database) error {
+func Serve(db Database, opts ServeOpts) error {
 	s := newServer(db)
 	ui := newUI()
 	http.Handle("/ui/", http.StripPrefix("/ui", ui))
 	http.Handle("/v0/", http.StripPrefix("/v0", s))
-	log.Println("Listening on", DefaultListen)
-	return http.ListenAndServe(DefaultListen, nil)
+	log.Println("Listening on", opts.Listen)
+	return http.ListenAndServe(opts.Listen, nil)
 }
 
 func newUI() http.Handler {

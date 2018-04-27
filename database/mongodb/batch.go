@@ -4,7 +4,7 @@ import (
   "context"
 	"fmt"
 
-	"github.com/ohsu-comp-bio/ktl"
+	"github.com/buchanae/ktl"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )

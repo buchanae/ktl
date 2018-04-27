@@ -5,13 +5,15 @@ import (
   "log"
   "fmt"
   "time"
-  "github.com/ohsu-comp-bio/ktl"
-  "github.com/ohsu-comp-bio/ktl/driver/task"
-  "github.com/ohsu-comp-bio/ktl/database/mongodb"
+  "github.com/buchanae/ktl"
+  "github.com/buchanae/ktl/driver/task"
+  "github.com/buchanae/ktl/database/mongodb"
   "github.com/spf13/cobra"
 )
 
 func init() {
+  opts := ktl.DefaultServeOpts
+
   cmd := &cobra.Command{
     Use: "serve",
     Args: cobra.NoArgs,
@@ -43,9 +45,12 @@ func init() {
         }
       }()
 
-      return ktl.Serve(db)
+      return ktl.Serve(db, opts)
     },
   }
+
+  f := cmd.Flags()
+  f.StringVar(&opts.Listen, "listen", opts.Listen, "Address for server to listen on.")
   root.AddCommand(cmd)
 }
 

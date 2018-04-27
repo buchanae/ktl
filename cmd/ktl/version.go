@@ -2,7 +2,7 @@ package main
 
 import (
   "fmt"
-  "github.com/ohsu-comp-bio/ktl/version"
+  "github.com/buchanae/ktl/version"
   "github.com/spf13/cobra"
 )
 

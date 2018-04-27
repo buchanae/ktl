@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/mitchellh/mapstructure"
-	"github.com/ohsu-comp-bio/ktl"
+	"github.com/buchanae/ktl"
 	"github.com/ohsu-comp-bio/tes"
 )
 

@@ -6,7 +6,7 @@ import (
   "encoding/json"
   "io/ioutil"
   "os"
-  "github.com/ohsu-comp-bio/ktl"
+  "github.com/buchanae/ktl"
   "github.com/ghodss/yaml"
   "github.com/spf13/cobra"
 )
@@ -29,7 +29,7 @@ var createBatchCmd = &cobra.Command{
 }
 
 func createBatch(path string) (id string, err error) {
-  cli := ktl.NewClient("http://"+ktl.DefaultListen)
+  cli := ktl.NewClient("http://"+ktl.DefaultServeOpts.Listen)
   ctx := context.Background()
 
   b, err := ioutil.ReadFile(path)
@@ -58,7 +58,7 @@ func createBatch(path string) (id string, err error) {
 var listBatchCmd = &cobra.Command{
   Use: "list",
   RunE: func(cmd *cobra.Command, args []string) error {
-    cli := ktl.NewClient("http://"+ktl.DefaultListen)
+    cli := ktl.NewClient("http://"+ktl.DefaultServeOpts.Listen)
     ctx := context.Background()
 
     resp, err := cli.ListBatches(ctx)
@@ -75,7 +75,7 @@ var getBatchCmd = &cobra.Command{
   Use: "get",
   Args: cobra.ExactArgs(1),
   RunE: func(cmd *cobra.Command, args []string) error {
-    cli := ktl.NewClient("http://"+ktl.DefaultListen)
+    cli := ktl.NewClient("http://"+ktl.DefaultServeOpts.Listen)
     ctx := context.Background()
 
     resp, err := cli.GetBatch(ctx, args[0])
