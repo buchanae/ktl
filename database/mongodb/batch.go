@@ -15,7 +15,8 @@ func (db *MongoDB) CreateBatch(ctx context.Context, b *ktl.Batch) error {
 }
 
 func (db *MongoDB) UpdateBatch(ctx context.Context, b *ktl.Batch) error {
-  return db.batches.Update(bson.M{"id": b.ID}, b)
+  _, err := db.batches.Upsert(bson.M{"id": b.ID}, b)
+  return err
 }
 
 func (db *MongoDB) GetBatch(ctx context.Context, id string) (*ktl.Batch, error) {

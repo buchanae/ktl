@@ -14,10 +14,6 @@ func ValidateBatch(b *Batch) error {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
-	if len(b.Steps) == 0 {
-		err(`"steps" is required, but empty`)
-	}
-
 	// count occurences of step IDs. Each ID should be referenced once.
 	allIDs := map[string]int{}
 

@@ -66,7 +66,9 @@ func PutStep(ctx context.Context, db Database, opts PutStepOptions) error {
 	}
 
 	batch, err := db.GetBatch(ctx, opts.BatchID)
-	if err != nil {
+  if err == ErrNotFound {
+    batch = &Batch{ID: opts.BatchID}
+	} else if err != nil {
 		return fmt.Errorf("getting batch: %s", err)
 	}
 
