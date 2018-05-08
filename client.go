@@ -88,6 +88,25 @@ func (c *Client) RestartStep(ctx context.Context, batchID, stepID string) error 
 	return c.do(ctx, req, nil)
 }
 
+func (c *Client) PutStep(ctx context.Context, batchID string, step *Step) error {
+  // TODO validate step. must have ID
+
+	st, err := json.Marshal(step)
+	if err != nil {
+		return fmt.Errorf("marshaling step: %s", err)
+	}
+
+	u := c.Address + "/v0/batch/" + batchID + "/step/" + step.ID
+	req, err := http.NewRequest("PUT", u, bytes.NewBuffer(st))
+	if err != nil {
+		return fmt.Errorf("creating request: %s", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+
+	err = c.do(ctx, req, nil)
+	return err
+}
+
 // do helps execute requests and deal with http responses; it checks for errors,
 // reads the body, and unmarshals the response into the given "out" object.
 func (c *Client) do(ctx context.Context, req *http.Request, out interface{}) error {

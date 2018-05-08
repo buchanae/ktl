@@ -1,0 +1,7 @@
+steps:
+- id: task-0
+  type: Task
+  config:
+    executors:
+    - image: alpine
+      command: ["echo"]

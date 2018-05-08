@@ -8,6 +8,7 @@ import (
 type RestartStepOptions struct {
 	BatchID        string
 	StepID         string
+  // KeepDownstream directs the restart action to avoid restarting downstream steps.
 	KeepDownstream bool
 }
 
@@ -24,12 +25,7 @@ func RestartStep(ctx context.Context, db Database, opts RestartStepOptions) erro
 		return fmt.Errorf("getting batch: %s", err)
 	}
 
-	var target *Step
-	for _, step := range batch.Steps {
-		if step.ID == opts.StepID {
-			target = step
-		}
-	}
+  target := FindStepByID(batch.Steps, opts.StepID)
 	if target == nil {
 		return ErrNotFound
 	}
@@ -42,9 +38,9 @@ func RestartStep(ctx context.Context, db Database, opts RestartStepOptions) erro
 	}
 
 	for _, step := range toRestart {
-		copy := *step
-		copy.History = nil
-		step.History = append(step.History, &copy)
+		cpy := *step
+		cpy.History = nil
+		step.History = append(step.History, &cpy)
 
 		step.State = Waiting
 		step.Logs = nil
@@ -56,4 +52,50 @@ func RestartStep(ctx context.Context, db Database, opts RestartStepOptions) erro
 		return fmt.Errorf("updating batch: %s", err)
 	}
 	return nil
+}
+
+type PutStepOptions struct {
+  BatchID string
+  Step *Step
+  // TODO KeepDownstream?
+}
+
+func PutStep(ctx context.Context, db Database, opts PutStepOptions) error {
+	if opts.BatchID == "" {
+		return fmt.Errorf("empty batch ID")
+	}
+
+	batch, err := db.GetBatch(ctx, opts.BatchID)
+	if err != nil {
+		return fmt.Errorf("getting batch: %s", err)
+	}
+
+  target := FindStepByID(batch.Steps, opts.Step.ID)
+  if target == nil {
+    batch.Steps = append(batch.Steps, opts.Step)
+  } else {
+    // TODO check step hash before replacing to make PUT idempotent
+		cpy := *target
+		cpy.History = nil
+		target.History = append(target.History, &cpy)
+
+		target.State = Waiting
+		target.Logs = nil
+		target.Version++
+  }
+
+	err = db.UpdateBatch(ctx, batch)
+	if err != nil {
+		return fmt.Errorf("updating batch: %s", err)
+	}
+	return nil
+}
+
+func FindStepByID(steps []*Step, id string) *Step {
+	for _, step := range steps {
+		if step.ID == id {
+      return step
+		}
+	}
+  return nil
 }

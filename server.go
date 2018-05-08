@@ -71,6 +71,11 @@ func newServer(db Database) *server {
 		Name("GetBatch").
 		HandlerFunc(s.getBatch)
 
+	r.Path("/batch/{batchID}/step/{stepID}").
+		Methods("PUT").
+		Name("PutStep").
+		HandlerFunc(s.putStep)
+
 	r.Path("/batch/{batchID}/step/{stepID}:restart").
 		Methods("POST").
 		Name("RestartStep").
@@ -185,6 +190,37 @@ func (s *server) restartStep(w http.ResponseWriter, req *http.Request) {
 	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error restarting step: %s", err), http.StatusInternalServerError)
+		return
+	}
+	return
+}
+
+func (s *server) putStep(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	batchID := vars["batchID"]
+	stepID := vars["stepID"]
+
+  step := &Step{}
+	dec := json.NewDecoder(req.Body)
+	defer req.Body.Close()
+
+	err := dec.Decode(step)
+	if err != nil {
+		http.Error(w, "error decoding Step from request body", http.StatusBadRequest)
+		return
+	}
+  step.ID = stepID
+
+	err = PutStep(req.Context(), s.db, PutStepOptions{
+		BatchID: batchID,
+		Step:  step,
+	})
+	if err == ErrNotFound {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error putting step: %s", err), http.StatusInternalServerError)
 		return
 	}
 	return

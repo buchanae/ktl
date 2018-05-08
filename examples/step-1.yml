@@ -1,0 +1,6 @@
+id: task-1
+type: Task
+config:
+  executors:
+  - image: alpine
+    command: ["sleep", "20"]
