@@ -1,0 +1,34 @@
+builds:
+  - binary: ktl
+    main: ./cmd/ktl/
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    ldflags: >
+      -X github.com/buchanae/ktl/version.BuildDate={{.Date}}
+      -X github.com/buchanae/ktl/version.GitCommit={{.Commit}}
+      -X github.com/buchanae/ktl/version.Version={{.Version}}
+
+dist: build/release
+
+git:
+  short_hash: true
+
+release:
+  draft: true
+
+env_files:
+  github_token: .github_token
+
+archive:
+  name_template: "ktl-{{.Os}}-{{.Arch}}-{{.Version}}"
+
+dockers:
+  - image: buchanae/ktl
+    dockerfile: ./docker/Dockerfile
+    tag_templates:
+      - "{{ .Version }}"

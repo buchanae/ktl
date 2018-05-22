@@ -1,0 +1,100 @@
+swagger: "2.0"
+
+info:
+  version: "0.1.0"
+  title: Ktl batch task executor
+  description: >
+    Ktl does this and that and TODO
+
+schemes:
+- http
+- https
+
+consumes: [application/json]
+produces: [application/json]
+
+basePath: /v0
+
+paths:
+  /batch:
+    post:
+      summary: Create a batch
+      description: Create a batch.
+      operationId: CreateBatch
+
+      parameters:
+      - in: body
+        name: batch
+        schema:
+          type: object
+          properties:
+            name:
+              description: |-
+                Short, human-readable name.
+              type: string
+
+            description:
+              description: |-
+                Longer, human-readable description.
+              type: string
+
+            tags:
+              description: |-
+                A key-value map of arbitrary tags.
+              type: object
+              additionalProperties:
+                type: string
+
+            steps:
+              description: |
+                Describes the steps in the batch.
+                Maps step IDs to step objects.
+              type: object
+              items:
+                $ref: '#/definitions/Step'
+
+      responses:
+        200:
+          description: OK
+          schema:
+            title: CreateBatchResponse
+            type: object
+            properties:
+              id:
+                type: string
+                description: ID of the created batch.
+                example: "bb009f1kq10g008vc910"
+
+
+definitions:
+  Step:
+    description: |-
+      Describes a unit of work in a Batch.
+    type: object
+    properties:
+
+      id:
+        description: |-
+          ID of the step. Must be unique within a batch.
+        type: string
+
+      type:
+        description: |-
+          Type of the step. There are many types of steps, some run
+          a task, some wait for an event, etc. 
+        type: string
+
+      dependencies:
+        description: |-
+          Lists the IDs of the steps this step depends on.
+        type: array
+        items:
+          type: string
+
+      config:
+        description: |-
+          Config contains opaque data used by step executors
+          to configure different types of steps; a task step
+          would store the task here, while an event step would
+          store the name of the event its waiting for.
+        type: object

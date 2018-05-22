@@ -1,0 +1,9 @@
+id: task-2
+type: Task
+config:
+  name: task 2
+  executors:
+  - image: alpine
+    command: ["sleep", "20"]
+dependencies:
+- task-1
