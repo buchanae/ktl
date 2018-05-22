@@ -14,10 +14,13 @@ import (
 type ServeOpts struct {
   // Listen is host/port ktl will listen on by default.
   Listen string
+  // TaskAPI is the URL of a TES Task API (i.e. Funnel)
+  TaskAPI string
 }
 
 var DefaultServeOpts = ServeOpts{
   Listen: "localhost:8543",
+  TaskAPI: "http://localhost:8000",
 }
 
 // Database describes the interface implemented by database backends such as mongo,

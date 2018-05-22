@@ -25,7 +25,7 @@ func init() {
         return err
       }
 
-      taskDriver, err := task.NewDriver()
+      taskDriver, err := task.NewDriver(opts.TaskAPI)
       if err != nil {
         return fmt.Errorf("creating task driver: %s", err)
       }
@@ -51,6 +51,7 @@ func init() {
 
   f := cmd.Flags()
   f.StringVar(&opts.Listen, "listen", opts.Listen, "Address for server to listen on.")
+  f.StringVar(&opts.TaskAPI, "taskapi", opts.TaskAPI, "Address of the Task API (i.e. Funnel).")
   root.AddCommand(cmd)
 }
 

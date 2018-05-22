@@ -12,8 +12,8 @@ type Driver struct {
 	cli *tes.Client
 }
 
-func NewDriver() (*Driver, error) {
-	cli, err := tes.NewClient("http://localhost:8000")
+func NewDriver(url string) (*Driver, error) {
+	cli, err := tes.NewClient(url)
 	if err != nil {
 		return nil, err
 	}
